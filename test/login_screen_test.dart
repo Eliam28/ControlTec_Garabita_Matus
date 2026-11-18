@@ -1,5 +1,3 @@
-import 'package:controltec_app/api/services/mock_login_api.dart';
-import 'package:controltec_app/api/services/login_service.dart';
 import 'package:controltec_app/api/auth_messages.dart';
 import 'package:controltec_app/main.dart';
 import 'package:controltec_app/screens/home_screen.dart';
@@ -9,18 +7,19 @@ import 'package:controltec_app/widgets/login_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'support/pending_login_api.dart';
+import 'support/login_test_support.dart';
 
 void main() {
-  Future<void> openLogin(WidgetTester tester) async {
+  Future<void> openLogin(WidgetTester tester, {int status = 200}) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(494, 936);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final service = LoginService.mock(
-      loginApi: const MockLoginApi(delay: Duration.zero),
+    final service = createTestLoginService(
+      handler: (_) async => status == 200
+          ? jsonResponse(sessionJson())
+          : jsonResponse({'detail': 'Invalid credentials'}, status),
     );
-    addTearDown(service.dispose);
     await tester.pumpWidget(MainApp(loginService: service));
   }
 
@@ -33,15 +32,22 @@ void main() {
   for (final data in [
     ('', '', AuthMessages.emptyFields),
     ('', 'secret', AuthMessages.emptyFields),
-    ('tecnico@controltec.com', '', AuthMessages.emptyFields),
+    ('test@example.com', '', AuthMessages.emptyFields),
     ('incorrecto', 'secret', AuthMessages.invalidEmail),
-    ('otro@controltec.com', 'Tecnico123', AuthMessages.invalidCredentials),
-    ('tecnico@controltec.com', 'incorrecta', AuthMessages.invalidCredentials),
+    (
+      'otro@controltec.com',
+      'http-test-password',
+      AuthMessages.invalidCredentials,
+    ),
+    ('test@example.com', 'incorrecta', AuthMessages.invalidCredentials),
   ]) {
     testWidgets('Shows the requested error for ${data.$1}/${data.$2}', (
       tester,
     ) async {
-      await openLogin(tester);
+      await openLogin(
+        tester,
+        status: data.$3 == AuthMessages.invalidCredentials ? 401 : 200,
+      );
       await tester.enterText(find.byType(TextField).at(0), data.$1);
       await tester.enterText(find.byType(TextField).at(1), data.$2);
       await submit(tester);
@@ -135,14 +141,11 @@ void main() {
   });
 
   testWidgets(
-    'Correct mock credentials open the main screen and remove the login route',
+    'Confirmed HTTP login opens the main screen and removes the login route',
     (tester) async {
       await openLogin(tester);
-      await tester.enterText(
-        find.byType(TextField).first,
-        'tecnico@controltec.com',
-      );
-      await tester.enterText(find.byType(TextField).last, 'Tecnico123');
+      await tester.enterText(find.byType(TextField).first, 'test@example.com');
+      await tester.enterText(find.byType(TextField).last, 'http-test-password');
       await submit(tester);
       expect(find.text('Mis servicios de hoy'), findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
@@ -158,14 +161,11 @@ void main() {
     'Pending login stays blue, disables input and blocks repeated submission',
     (tester) async {
       await openLogin(tester);
-      final api = PendingLoginApi();
-      final service = LoginService.mock(loginApi: api);
+      final api = PendingLoginResponse();
+      final service = createTestLoginService(handler: api.handle);
       await tester.pumpWidget(MainApp(key: UniqueKey(), loginService: service));
-      await tester.enterText(
-        find.byType(TextField).first,
-        'tecnico@controltec.com',
-      );
-      await tester.enterText(find.byType(TextField).last, 'Tecnico123');
+      await tester.enterText(find.byType(TextField).first, 'test@example.com');
+      await tester.enterText(find.byType(TextField).last, 'http-test-password');
       await tester.tap(find.byType(FilledButton));
       await tester.pump();
       expect(
@@ -182,7 +182,7 @@ void main() {
       await tester.pump();
       expect(api.calls, 1);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      api.result.complete(mockResponse);
+      api.result.complete(jsonResponse(sessionJson()));
       await tester.pumpAndSettle();
       expect(find.byType(HomeScreen), findsOneWidget);
     },
@@ -196,7 +196,7 @@ void main() {
     testWidgets(
       'Layout scrolls without overflow at $size and with a keyboard',
       (tester) async {
-        await openLogin(tester);
+        await openLogin(tester, status: 401);
         tester.view.physicalSize = size;
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
@@ -204,7 +204,7 @@ void main() {
         addTearDown(tester.view.resetViewInsets);
         await tester.enterText(
           find.byType(TextField).first,
-          'tecnico@controltec.com',
+          'test@example.com',
         );
         await tester.enterText(find.byType(TextField).last, 'incorrecta');
         await submit(tester);

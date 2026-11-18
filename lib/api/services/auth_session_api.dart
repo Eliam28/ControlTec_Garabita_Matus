@@ -4,8 +4,7 @@ import '../api_routes.dart';
 import '../auth_messages.dart';
 import 'auth_api_contract.dart';
 
-/// Existing refresh/logout/me preparation, sharing LoginApi's HTTP client.
-/// These operations remain unused by the temporary home screen.
+/// Mobile refresh/logout/me, sharing LoginApi's HTTP client and secure token pair.
 class AuthSessionApi extends AbstractApiHandler<AuthTokens, String> {
   AuthSessionApi({
     required super.httpClient,

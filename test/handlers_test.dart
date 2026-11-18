@@ -2,19 +2,12 @@ import 'dart:convert';
 
 import 'package:controltec_app/api/app_config.dart';
 import 'package:controltec_app/api/app_dependencies.dart';
-import 'package:controltec_app/api/auth_messages.dart';
 import 'package:controltec_app/api/services/login_api.dart';
-import 'package:controltec_app/api/services/login_service.dart';
 import 'package:controltec_app/base/abstract_api_handler.dart';
 import 'package:controltec_app/base/custom_exception.dart';
-import 'package:controltec_app/models/auth_response_dto.dart';
-import 'package:controltec_app/models/auth_tokens.dart';
-import 'package:controltec_app/models/user_credentials_dto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-
-import 'support/pending_login_api.dart';
 
 void main() {
   for (final method in ['GET', 'POST', 'PUT', 'DELETE']) {
@@ -63,21 +56,6 @@ void main() {
     },
   );
 
-  test('Mock configuration never constructs an HTTP client', () async {
-    final dependencies = http.runWithClient(
-      () => AppDependencies.fromConfig(const AppConfig()),
-      () => throw StateError('HTTP client must not be created in mock mode'),
-    );
-    addTearDown(dependencies.dispose);
-    final response = await dependencies.loginService.login(
-      'tecnico@controltec.com',
-      'Tecnico123',
-    );
-    expect(response.isMock, isTrue);
-    expect(response.tokens, isNull);
-    expect(dependencies.loginService.tokenStore, isNull);
-  });
-
   test('Real configuration shares one HTTP client and disposes it once', () {
     final client = TrackingClient();
     int clientsCreated = 0;
@@ -98,76 +76,6 @@ void main() {
     );
     dependencies.dispose();
     expect(client.closeCalls, 1);
-  });
-
-  test(
-    'The service converts an invalid mock response into a safe exception',
-    () async {
-      final api = PendingLoginApi();
-      final service = LoginService.mock(loginApi: api);
-      final response = service.login('test@example.com', 'secret');
-      api.result.complete('{malformed');
-      await expectLater(
-        response,
-        throwsA(
-          isA<CustomException>().having(
-            (error) => error.message,
-            'message',
-            AuthMessages.unavailable,
-          ),
-        ),
-      );
-    },
-  );
-
-  test(
-    'A custom exception survives the service boundary with its status',
-    () async {
-      const error = CustomException(
-        message: 'Mensaje esperado',
-        status: 403,
-        code: 'forbidden',
-      );
-      final api = PendingLoginApi();
-      final service = LoginService.mock(loginApi: api);
-      final response = service.login('test@example.com', 'secret');
-      api.result.completeError(error);
-      await expectLater(response, throwsA(same(error)));
-    },
-  );
-
-  test('DTO serialization round-trips the internal format without changing credentials', () {
-    const credentials = UserCredentialsDto(
-      email: 'user@example.com',
-      password: ' secret ',
-    );
-    final decoded = UserCredentialsDto.fromJson(credentials.toJson());
-    expect(decoded.email, credentials.email);
-    expect(decoded.password, credentials.password);
-    final mock = AuthResponseDto.fromJson(
-      jsonDecode(mockResponse) as Map<String, dynamic>,
-    );
-    expect(mock.tokens, isNull);
-    expect(
-      AuthResponseDto.fromJson(mock.toJson()).technician.name,
-      mock.technician.name,
-    );
-    final apiResponse = AuthResponseDto.api(
-      technician: mock.technician,
-      tokens: const AuthTokens(
-        accessToken: 'test-access',
-        refreshToken: 'test-refresh',
-      ),
-    );
-    final restored = AuthResponseDto.fromJson(apiResponse.toJson());
-    expect(restored.isMock, isFalse);
-    expect(restored.tokens!.refreshToken, 'test-refresh');
-  });
-
-  test('Mock DTOs reject fabricated tokens', () {
-    final json = jsonDecode(mockResponse) as Map<String, dynamic>;
-    json['tokens'] = {'access': 'fake', 'refresh': 'fake'};
-    expect(() => AuthResponseDto.fromJson(json), throwsFormatException);
   });
 }
 

@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
-
 import '../../base/abstract_service_handler.dart';
 import '../../base/custom_exception.dart';
 import '../../base/handler.dart';
@@ -12,12 +10,15 @@ import '../../models/user_credentials_dto.dart';
 import '../auth_messages.dart';
 import 'auth_api_contract.dart';
 import 'auth_session_api.dart';
+import 'login_api.dart';
 import 'token_store.dart';
 
 class LoginService
     extends AbstractServiceHandler<UserCredentialsDto, AuthResponseDto> {
-  LoginService.mock({required this.loginApi})
-    : contract = null,
+  // Required by the shared container; this constructor cannot authenticate.
+  LoginService.mock({required Handler<UserCredentialsDto, String> loginApi})
+    : loginApi = null,
+      contract = null,
       sessionApi = null,
       tokenStore = null,
       super(
@@ -26,7 +27,7 @@ class LoginService
       );
 
   LoginService.api({
-    required this.loginApi,
+    required LoginApi this.loginApi,
     required AuthApiContract this.contract,
     required AuthSessionApi this.sessionApi,
     required TokenStore this.tokenStore,
@@ -35,89 +36,118 @@ class LoginService
          connectionMessage: AuthMessages.connection,
        );
 
-  final Handler<UserCredentialsDto, String> loginApi;
+  final LoginApi? loginApi;
   final AuthApiContract? contract;
   final AuthSessionApi? sessionApi;
   final TokenStore? tokenStore;
-  AuthResponseDto? _session;
+  Future<AuthResponseDto>? _refreshInFlight;
 
-  bool get isMock => contract == null;
+  static const invalidResponseMessage =
+      'La respuesta del servidor no es válida. Intente nuevamente';
 
   Future<AuthResponseDto> login(String email, String password) =>
       execute(UserCredentialsDto(email: email, password: password));
 
   @override
   Future<AuthResponseDto> doExecute(UserCredentialsDto input) async {
-    if (isMock && kReleaseMode) {
-      throw const CustomException(message: AuthMessages.pendingApi);
+    _requireConfiguration();
+    final String body;
+    try {
+      body = await loginApi!.execute(input);
+    } on FormatException {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
     }
-    final body = await loginApi.execute(input);
-    final json = jsonDecode(body);
-    if (isMock) {
-      final response = AuthResponseDto.fromJson(json as Map<String, dynamic>);
-      if (!response.isMock || response.tokens != null) {
-        throw const FormatException('Expected mock response');
-      }
-      return _session = response;
-    }
-    final tokens = _readTokens(json);
-    final technician = await _fetchTechnician(tokens);
-    await tokenStore!.write(tokens);
-    return _session = AuthResponseDto.api(
-      technician: technician,
-      tokens: tokens,
-    );
+    final response = _readSession(body);
+    await tokenStore!.write(response.tokens);
+    return response;
   }
 
-  Future<AuthResponseDto> refresh() => runSafely(() async {
-    if (isMock) return _requireSession();
-    final previous = await _requireTokens();
-    final body = await sessionApi!.refresh(previous);
-    final tokens = _readTokens(jsonDecode(body), previous: previous);
-    // Preserve refresh-token rotation even when the next profile request fails.
-    await tokenStore!.write(tokens);
-    return _session = AuthResponseDto.api(
-      technician: await _fetchTechnician(tokens),
-      tokens: tokens,
-    );
+  Future<AuthResponseDto> refresh() {
+    // The backend rotates refresh tokens: concurrent callers must renew once.
+    return _refreshInFlight ??= runSafely(() async {
+      _requireConfiguration();
+      final previous = await _requireTokens();
+      final response = _readSession(await sessionApi!.refresh(previous));
+      await tokenStore!.write(response.tokens);
+      return response;
+    }).whenComplete(() => _refreshInFlight = null);
+  }
+
+  Future<Technician> me() => runSafely(() async {
+    _requireConfiguration();
+    return _fetchTechnician(await _requireTokens());
   });
 
-  Future<Technician> me() => runSafely(
-    () async => isMock
-        ? _requireSession().technician
-        : await _fetchTechnician(await _requireTokens()),
-  );
-
   Future<void> logout() => runSafely(() async {
+    _requireConfiguration();
     try {
-      if (!isMock) {
-        final tokens = await tokenStore!.read();
-        if (tokens != null) await sessionApi!.logout(tokens);
-      }
+      final tokens = await tokenStore!.read();
+      if (tokens != null) await sessionApi!.logout(tokens);
     } finally {
-      _session = null;
-      await tokenStore?.clear();
+      await tokenStore!.clear();
     }
   });
 
-  AuthResponseDto _requireSession() =>
-      _session ??
-      (throw const CustomException(message: AuthMessages.expiredSession));
+  void _requireConfiguration() {
+    if (loginApi == null ||
+        contract == null ||
+        sessionApi == null ||
+        tokenStore == null) {
+      throw const CustomException(
+        message: AuthMessages.pendingApi,
+        code: 'configuration',
+      );
+    }
+  }
 
   Future<AuthTokens> _requireTokens() async =>
       await tokenStore!.read() ??
       (throw const CustomException(message: AuthMessages.expiredSession));
 
-  AuthTokens _readTokens(Object? response, {AuthTokens? previous}) {
-    final tokens = contract!.readTokens(response, previousTokens: previous);
-    if (tokens.accessToken.isEmpty || tokens.refreshToken.isEmpty) {
-      throw const FormatException('Empty tokens');
+  AuthResponseDto _readSession(String body) {
+    try {
+      final json = jsonDecode(body);
+      final response = contract!.readSession(json);
+      if (!response.technician.active ||
+          response.technician.role == 'customer') {
+        throw const CustomException(
+          message: LoginApi.accessDeniedMessage,
+          code: 'forbidden',
+        );
+      }
+      return response;
+    } on FormatException {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
+    } on TypeError {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
     }
-    return tokens;
   }
 
-  Future<Technician> _fetchTechnician(AuthTokens tokens) async =>
-      contract!.readTechnician(jsonDecode(await sessionApi!.execute(tokens)));
+  Future<Technician> _fetchTechnician(AuthTokens tokens) async {
+    final body = await sessionApi!.execute(tokens);
+    try {
+      return contract!.readTechnician(jsonDecode(body));
+    } on FormatException {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
+    } on TypeError {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
+    }
+  }
 
-  void dispose() => _session = null;
+  void dispose() => _refreshInFlight = null;
 }

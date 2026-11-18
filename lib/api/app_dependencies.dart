@@ -24,8 +24,7 @@ class AppDependencies {
       );
     }
     final httpClient = http.Client();
-    // TODO(api-contract): Supply the confirmed backend adapter here.
-    const contract = PendingAuthApiContract();
+    const contract = FastApiAuthContract();
     final loginService = LoginService.api(
       loginApi: LoginApi(
         httpClient: httpClient,
