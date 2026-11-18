@@ -16,6 +16,27 @@ no almacena credenciales ni genera tokens. Mantiene únicamente la sesión en me
 El modo mock se habilita por defecto en debug/profile y siempre se bloquea en
 release, tanto desde la configuración como en `MockLoginApi` y `LoginService`.
 
+## API demo
+
+Hay una API de demostración desplegada solo para este proyecto. Sus datos son
+inventados y no tiene relación con datos reales de ControlTec.
+
+| Qué | Valor |
+| --- | --- |
+| URL base | `https://controltec-tksj.onrender.com` |
+| Documentación (Swagger) | `https://controltec-tksj.onrender.com/docs` |
+| Técnico 1 | `demo.tecnico1@example.com` / `DemoUni2026!` |
+| Técnico 2 | `demo.tecnico2@example.com` / `DemoUni2026!` |
+
+```sh
+flutter run --dart-define=USE_MOCK_AUTH=false --dart-define=API_BASE_URL=https://controltec-tksj.onrender.com
+```
+
+Está en un plan gratuito: si nadie la usa en 15 minutos se duerme, y la primera
+petición tarda alrededor de un minuto en responder. Abre `/docs` en el navegador
+para despertarla antes de probar la app. Cada técnico tiene servicios agendados
+para hoy y los dos días siguientes.
+
 ## Arquitectura de referencia
 
 Se revisó primero el código de [flutter-movil-app del profesor Luis Mejía Poot](https://github.com/LuisMejiaPoot/flutter-movil-app),
