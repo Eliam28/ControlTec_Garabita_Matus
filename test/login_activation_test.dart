@@ -12,7 +12,6 @@ void main() {
     expect(const AppConfig().useMockAuth, isFalse);
     final dependencies = AppDependencies.fromConfig(config);
     addTearDown(dependencies.dispose);
-    expect(dependencies.loginService.isMock, isFalse);
     expect(dependencies.loginService.contract, isA<FastApiAuthContract>());
     final api = dependencies.loginService.loginApi as LoginApi;
     expect(

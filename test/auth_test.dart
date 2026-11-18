@@ -1,5 +1,4 @@
 import 'package:controltec_app/base/custom_exception.dart';
-import 'package:controltec_app/api/services/login_service.dart';
 import 'package:controltec_app/api/services/mock_login_api.dart';
 import 'package:controltec_app/api/app_config.dart';
 import 'package:controltec_app/api/app_dependencies.dart';
@@ -9,11 +8,11 @@ import 'package:controltec_app/screens/controllers/login_controller.dart';
 import 'package:controltec_app/models/user_credentials_dto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'support/pending_login_api.dart';
+import 'support/login_test_support.dart';
 
 const validCredentials = UserCredentialsDto(
-  email: 'tecnico@controltec.com',
-  password: 'Tecnico123',
+  email: 'test@example.com',
+  password: 'http-test-password',
 );
 
 void main() {
@@ -21,7 +20,7 @@ void main() {
     for (final fields in [
       ('', ''),
       ('', 'secret'),
-      ('tecnico@controltec.com', ''),
+      ('test@example.com', ''),
       ('bad-email', ''),
       (' ', '   '),
     ]) {
@@ -67,62 +66,38 @@ void main() {
     });
   });
 
-  group('Mock authentication', () {
-    late LoginService service;
-    setUp(
-      () => service = LoginService.mock(
-        loginApi: const MockLoginApi(delay: Duration.zero),
-      ),
-    );
-    tearDown(() => service.dispose());
-
+  group('Disabled legacy authentication', () {
     test(
-      'Only the supplied credentials authenticate; no tokens are fabricated',
+      'The shared legacy configuration cannot establish a session',
       () async {
-        for (final credentials in [
-          const UserCredentialsDto(
-            email: 'otro@controltec.com',
-            password: 'Tecnico123',
-          ),
-          const UserCredentialsDto(
-            email: 'tecnico@controltec.com',
-            password: 'incorrecta',
-          ),
-          const UserCredentialsDto(
-            email: 'tecnico@controltec.com',
-            password: ' Tecnico123 ',
-          ),
-        ]) {
-          await expectLater(
-            service.execute(credentials),
-            throwsA(
-              isA<CustomException>().having(
-                (e) => e.message,
-                'message',
-                AuthMessages.invalidCredentials,
-              ),
+        final dependencies = AppDependencies.fromConfig(
+          const AppConfig(mockAuth: true),
+        );
+        addTearDown(dependencies.dispose);
+        await expectLater(
+          dependencies.loginService.execute(validCredentials),
+          throwsA(
+            isA<CustomException>().having(
+              (error) => error.code,
+              'code',
+              'configuration',
             ),
-          );
-        }
-        final session = await service.execute(validCredentials);
-        expect(session.isMock, isTrue);
-        expect(session.tokens, isNull);
-        expect(await service.me(), session.technician);
-        expect(await service.refresh(), session);
-        await service.logout();
-        await expectLater(service.me(), throwsA(isA<CustomException>()));
+          ),
+        );
       },
     );
 
-    test('Configuration selects mock or REST without changing the UI', () {
-      final mock = AppDependencies.fromConfig(const AppConfig(mockAuth: true));
-      final api = AppDependencies.fromConfig(const AppConfig(mockAuth: false));
-      expect(mock.loginService.loginApi, isA<MockLoginApi>());
-      expect(mock.loginService.isMock, isTrue);
-      expect(api.loginService.loginApi, isNot(isA<MockLoginApi>()));
-      expect(api.loginService.isMock, isFalse);
-      mock.dispose();
-      api.dispose();
+    test('The compatibility API cannot return a simulated response', () async {
+      await expectLater(
+        const MockLoginApi().execute(validCredentials),
+        throwsA(
+          isA<CustomException>().having(
+            (error) => error.code,
+            'code',
+            'configuration',
+          ),
+        ),
+      );
     });
   });
 
@@ -130,8 +105,11 @@ void main() {
     test(
       'Validates before calling the service and preserves password whitespace',
       () async {
-        final service = LoginService.mock(
-          loginApi: const MockLoginApi(delay: Duration.zero),
+        int requests = 0;
+        final service = createTestLoginService(
+          handler: (_) async => ++requests == 1
+              ? jsonResponse({'detail': 'Invalid credentials'}, 401)
+              : jsonResponse(sessionJson()),
         );
         final controller = LoginController(service);
         addTearDown(controller.dispose);
@@ -141,7 +119,10 @@ void main() {
         expect(await controller.login('bad', 'secret'), isFalse);
         expect(controller.errorMessage, AuthMessages.invalidEmail);
         expect(
-          await controller.login(validCredentials.email, ' Tecnico123 '),
+          await controller.login(
+            validCredentials.email,
+            ' http-test-password ',
+          ),
           isFalse,
         );
         expect(controller.errorMessage, AuthMessages.invalidCredentials);
@@ -153,14 +134,14 @@ void main() {
           isTrue,
         );
         expect(controller.errorMessage, isNull);
-        expect(controller.session?.isMock, isTrue);
+        expect(controller.session?.tokens.accessToken, 'test-only-access');
         expect(controller.isLoading, isFalse);
       },
     );
 
     test('Blocks duplicate requests while a login is pending', () async {
-      final api = PendingLoginApi();
-      final service = LoginService.mock(loginApi: api);
+      final api = PendingLoginResponse();
+      final service = createTestLoginService(handler: api.handle);
       final controller = LoginController(service);
       addTearDown(controller.dispose);
       final first = controller.login(
@@ -175,8 +156,9 @@ void main() {
         ),
         isFalse,
       );
+      await api.started.future;
       expect(api.calls, 1);
-      api.result.complete(mockResponse);
+      api.result.complete(jsonResponse(sessionJson()));
       expect(await first, isTrue);
       expect(controller.isLoading, isFalse);
     });
@@ -184,15 +166,15 @@ void main() {
     test(
       'A late response after disposal does not notify or establish a session',
       () async {
-        final api = PendingLoginApi();
-        final service = LoginService.mock(loginApi: api);
+        final api = PendingLoginResponse();
+        final service = createTestLoginService(handler: api.handle);
         final controller = LoginController(service);
         final result = controller.login(
           validCredentials.email,
           validCredentials.password,
         );
         controller.dispose();
-        api.result.complete(mockResponse);
+        api.result.complete(jsonResponse(sessionJson()));
         expect(await result, isFalse);
         expect(controller.session, isNull);
       },
@@ -201,14 +183,15 @@ void main() {
     test(
       'Unexpected failures reset loading and expose a safe message',
       () async {
-        final api = PendingLoginApi();
-        final service = LoginService.mock(loginApi: api);
+        final api = PendingLoginResponse();
+        final service = createTestLoginService(handler: api.handle);
         final controller = LoginController(service);
         addTearDown(controller.dispose);
         final result = controller.login(
           validCredentials.email,
           validCredentials.password,
         );
+        await api.started.future;
         api.result.completeError(Exception('Internal details'));
         expect(await result, isFalse);
         expect(controller.errorMessage, AuthMessages.unavailable);

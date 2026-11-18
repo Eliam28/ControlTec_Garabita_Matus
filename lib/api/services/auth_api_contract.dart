@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import '../../base/custom_exception.dart';
-import '../auth_messages.dart';
 import '../../models/auth_request_body.dart';
 import '../../models/user_credentials_dto.dart';
 import '../../models/auth_response_dto.dart';
@@ -15,29 +13,7 @@ abstract interface class AuthApiContract {
   Technician readTechnician(Object? response);
 }
 
-/// Explicit unconfigured contract retained for regression tests. Production
-/// must select FastApiAuthContract in the composition root.
-class PendingAuthApiContract implements AuthApiContract {
-  const PendingAuthApiContract();
-
-  Never _pending() => throw const CustomException(
-    message: AuthMessages.pendingApi,
-    code: 'configuration',
-  );
-
-  @override
-  AuthRequestBody loginBody(UserCredentialsDto credentials) => _pending();
-  @override
-  AuthRequestBody refreshBody(String refreshToken) => _pending();
-  @override
-  AuthRequestBody logoutBody(String refreshToken) => _pending();
-  @override
-  AuthResponseDto readSession(Object? response) => _pending();
-  @override
-  Technician readTechnician(Object? response) => _pending();
-}
-
-/// Confirmed against /openapi.json on 2026-11-18. No cookies or CSRF on mobile.
+/// Mobile authentication uses JSON and Bearer tokens, without cookies or CSRF.
 class FastApiAuthContract implements AuthApiContract {
   const FastApiAuthContract();
 

@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
-
 import '../../base/abstract_service_handler.dart';
 import '../../base/custom_exception.dart';
 import '../../base/handler.dart';
@@ -17,8 +15,10 @@ import 'token_store.dart';
 
 class LoginService
     extends AbstractServiceHandler<UserCredentialsDto, AuthResponseDto> {
-  LoginService.mock({required this.loginApi})
-    : contract = null,
+  // Required by the shared container; this constructor cannot authenticate.
+  LoginService.mock({required Handler<UserCredentialsDto, String> loginApi})
+    : loginApi = null,
+      contract = null,
       sessionApi = null,
       tokenStore = null,
       super(
@@ -27,7 +27,7 @@ class LoginService
       );
 
   LoginService.api({
-    required this.loginApi,
+    required LoginApi this.loginApi,
     required AuthApiContract this.contract,
     required AuthSessionApi this.sessionApi,
     required TokenStore this.tokenStore,
@@ -36,29 +36,24 @@ class LoginService
          connectionMessage: AuthMessages.connection,
        );
 
-  final Handler<UserCredentialsDto, String> loginApi;
+  final LoginApi? loginApi;
   final AuthApiContract? contract;
   final AuthSessionApi? sessionApi;
   final TokenStore? tokenStore;
-  AuthResponseDto? _session;
   Future<AuthResponseDto>? _refreshInFlight;
 
   static const invalidResponseMessage =
       'La respuesta del servidor no es válida. Intente nuevamente';
-
-  bool get isMock => contract == null;
 
   Future<AuthResponseDto> login(String email, String password) =>
       execute(UserCredentialsDto(email: email, password: password));
 
   @override
   Future<AuthResponseDto> doExecute(UserCredentialsDto input) async {
-    if (isMock && kReleaseMode) {
-      throw const CustomException(message: AuthMessages.pendingApi);
-    }
+    _requireConfiguration();
     final String body;
     try {
-      body = await loginApi.execute(input);
+      body = await loginApi!.execute(input);
     } on FormatException {
       throw const CustomException(
         message: invalidResponseMessage,
@@ -66,42 +61,47 @@ class LoginService
       );
     }
     final response = _readSession(body);
-    if (!isMock) await tokenStore!.write(response.tokens!);
-    return _session = response;
+    await tokenStore!.write(response.tokens);
+    return response;
   }
 
   Future<AuthResponseDto> refresh() {
     // The backend rotates refresh tokens: concurrent callers must renew once.
     return _refreshInFlight ??= runSafely(() async {
-      if (isMock) return _requireSession();
+      _requireConfiguration();
       final previous = await _requireTokens();
       final response = _readSession(await sessionApi!.refresh(previous));
-      await tokenStore!.write(response.tokens!);
-      return _session = response;
+      await tokenStore!.write(response.tokens);
+      return response;
     }).whenComplete(() => _refreshInFlight = null);
   }
 
-  Future<Technician> me() => runSafely(
-    () async => isMock
-        ? _requireSession().technician
-        : await _fetchTechnician(await _requireTokens()),
-  );
+  Future<Technician> me() => runSafely(() async {
+    _requireConfiguration();
+    return _fetchTechnician(await _requireTokens());
+  });
 
   Future<void> logout() => runSafely(() async {
+    _requireConfiguration();
     try {
-      if (!isMock) {
-        final tokens = await tokenStore!.read();
-        if (tokens != null) await sessionApi!.logout(tokens);
-      }
+      final tokens = await tokenStore!.read();
+      if (tokens != null) await sessionApi!.logout(tokens);
     } finally {
-      _session = null;
-      await tokenStore?.clear();
+      await tokenStore!.clear();
     }
   });
 
-  AuthResponseDto _requireSession() =>
-      _session ??
-      (throw const CustomException(message: AuthMessages.expiredSession));
+  void _requireConfiguration() {
+    if (loginApi == null ||
+        contract == null ||
+        sessionApi == null ||
+        tokenStore == null) {
+      throw const CustomException(
+        message: AuthMessages.pendingApi,
+        code: 'configuration',
+      );
+    }
+  }
 
   Future<AuthTokens> _requireTokens() async =>
       await tokenStore!.read() ??
@@ -110,21 +110,9 @@ class LoginService
   AuthResponseDto _readSession(String body) {
     try {
       final json = jsonDecode(body);
-      final response = isMock
-          ? AuthResponseDto.fromJson(json as Map<String, dynamic>)
-          : contract!.readSession(json);
-      final tokens = response.tokens;
-      if (response.isMock != isMock ||
-          (isMock && tokens != null) ||
-          (!isMock &&
-              (tokens == null ||
-                  tokens.accessToken.trim().isEmpty ||
-                  tokens.refreshToken.trim().isEmpty))) {
-        throw const FormatException('Invalid session');
-      }
-      if (!isMock &&
-          (!response.technician.active ||
-              response.technician.role == 'customer')) {
+      final response = contract!.readSession(json);
+      if (!response.technician.active ||
+          response.technician.role == 'customer') {
         throw const CustomException(
           message: LoginApi.accessDeniedMessage,
           code: 'forbidden',
@@ -161,5 +149,5 @@ class LoginService
     }
   }
 
-  void dispose() => _session = null;
+  void dispose() => _refreshInFlight = null;
 }

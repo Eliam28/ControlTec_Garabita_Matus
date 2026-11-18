@@ -2,22 +2,15 @@ import 'auth_tokens.dart';
 import 'technician.dart';
 
 class AuthResponseDto {
-  const AuthResponseDto.mock(this.technician)
-    : tokens = null,
-      isMock = true,
-      expiresIn = null,
-      refreshExpiresIn = null;
-
   const AuthResponseDto.api({
     required this.technician,
-    required AuthTokens this.tokens,
+    required this.tokens,
     this.expiresIn,
     this.refreshExpiresIn,
-  }) : isMock = false;
+  });
 
   final Technician technician;
-  final AuthTokens? tokens;
-  final bool isMock;
+  final AuthTokens tokens;
   final int? expiresIn;
   final int? refreshExpiresIn;
 
@@ -41,32 +34,4 @@ class AuthResponseDto {
       refreshExpiresIn: refreshExpiresIn,
     );
   }
-
-  /// Internal mock/test representation. FastAPI uses fromApiJson instead.
-  factory AuthResponseDto.fromJson(Map<String, dynamic> json) {
-    final technician = Technician.fromJson(
-      json['technician'] as Map<String, dynamic>,
-    );
-    final isMock = json['isMock'] as bool;
-    if (isMock) {
-      if (json['tokens'] != null) {
-        throw const FormatException('Mock tokens are not allowed');
-      }
-      return AuthResponseDto.mock(technician);
-    }
-    return AuthResponseDto.api(
-      technician: technician,
-      tokens: AuthTokens.fromJson(json['tokens'] as Map<String, dynamic>),
-      expiresIn: json['expiresIn'] as int?,
-      refreshExpiresIn: json['refreshExpiresIn'] as int?,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-    'isMock': isMock,
-    'technician': technician.toJson(),
-    'tokens': tokens?.toJson(),
-    if (expiresIn != null) 'expiresIn': expiresIn,
-    if (refreshExpiresIn != null) 'refreshExpiresIn': refreshExpiresIn,
-  };
 }

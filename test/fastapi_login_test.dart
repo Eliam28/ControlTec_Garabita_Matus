@@ -10,6 +10,7 @@ import 'package:controltec_app/api/services/login_service.dart';
 import 'package:controltec_app/api/services/my_day_api.dart';
 import 'package:controltec_app/api/services/my_day_service.dart';
 import 'package:controltec_app/api/services/token_store.dart';
+
 import 'package:controltec_app/base/custom_exception.dart';
 import 'package:controltec_app/main.dart';
 import 'package:controltec_app/models/auth_tokens.dart';
@@ -22,55 +23,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/login_test_support.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const contract = FastApiAuthContract();
 
-  LoginService serviceFor(
-    Future<http.Response> Function(http.Request) handler, {
-    TokenStore? store,
-    Duration timeout = const Duration(seconds: 1),
-  }) {
-    final client = MockClient(handler);
-    addTearDown(client.close);
-    final service = LoginService.api(
-      loginApi: LoginApi(
-        httpClient: client,
-        baseUrl: 'https://example.com',
-        contract: contract,
-        timeout: timeout,
-      ),
-      sessionApi: AuthSessionApi(
-        httpClient: client,
-        baseUrl: 'https://example.com',
-        contract: contract,
-      ),
-      contract: contract,
-      tokenStore: store ?? MemoryStore(),
-    );
-    addTearDown(service.dispose);
-    return service;
-  }
-
   test('Confirmed LoginRequest and MobileSessionRead authenticate without requesting me', () async {
     final store = MemoryStore();
     int calls = 0;
-    final service = serviceFor((request) async {
-      calls++;
-      expect(request.method, 'POST');
-      expect(request.url.path, ApiRoutes.login);
-      expect(request.headers['Content-Type'], startsWith('application/json'));
-      expect(request.headers['Authorization'], isNull);
-      expect(jsonDecode(request.body), {
-        'email': 'test@example.com',
-        'password': ' password ',
-        'door': 'staff',
-      });
-      return jsonResponse(sessionJson());
-    }, store: store);
+    final service = createTestLoginService(
+      handler: (request) async {
+        calls++;
+        expect(request.method, 'POST');
+        expect(request.url.path, ApiRoutes.login);
+        expect(request.headers['Content-Type'], startsWith('application/json'));
+        expect(request.headers['Authorization'], isNull);
+        expect(jsonDecode(request.body), {
+          'email': 'test@example.com',
+          'password': ' password ',
+          'door': 'staff',
+        });
+        return jsonResponse(sessionJson());
+      },
+      store: store,
+    );
     final response = await service.login('test@example.com', ' password ');
     expect(calls, 1);
-    expect(response.isMock, isFalse);
     expect(response.technician.name, 'Técnico de prueba');
     expect(response.technician.id, 'test-user');
     expect(response.technician.capabilities, contains('field:access'));
@@ -86,10 +65,12 @@ void main() {
   ]) {
     test('Local validation prevents HTTP for ${input.$3}', () async {
       int calls = 0;
-      final service = serviceFor((_) async {
-        calls++;
-        return jsonResponse(sessionJson());
-      });
+      final service = createTestLoginService(
+        handler: (_) async {
+          calls++;
+          return jsonResponse(sessionJson());
+        },
+      );
       final controller = LoginController(service);
       addTearDown(controller.dispose);
       expect(await controller.login(input.$1, input.$2), isFalse);
@@ -109,8 +90,8 @@ void main() {
       'HTTP ${error.$1} fails with a safe message and does not persist a session',
       () async {
         final store = MemoryStore();
-        final service = serviceFor(
-          (_) async => jsonResponse({
+        final service = createTestLoginService(
+          handler: (_) async => jsonResponse({
             'detail': error.$1 == 422
                 ? [
                     {
@@ -126,9 +107,8 @@ void main() {
         );
         final controller = LoginController(service);
         addTearDown(controller.dispose);
-        // These were valid only in the old mock; the server must now decide.
         expect(
-          await controller.login('tecnico@controltec.com', 'Tecnico123'),
+          await controller.login('test@example.com', 'rejected-password'),
           isFalse,
         );
         expect(controller.errorMessage, error.$2);
@@ -140,8 +120,9 @@ void main() {
   }
 
   test('An offline login is distinguished from a timeout', () async {
-    final service = serviceFor(
-      (_) async => throw http.ClientException('private socket information'),
+    final service = createTestLoginService(
+      handler: (_) async =>
+          throw http.ClientException('private socket information'),
     );
     await expectLater(
       service.login('test@example.com', 'secret'),
@@ -159,8 +140,8 @@ void main() {
 
   test('A slow login resets loading and shows the timeout message', () async {
     final pending = Completer<http.Response>();
-    final service = serviceFor(
-      (_) => pending.future,
+    final service = createTestLoginService(
+      handler: (_) => pending.future,
       timeout: const Duration(milliseconds: 5),
     );
     final controller = LoginController(service);
@@ -189,8 +170,8 @@ void main() {
           json['token_type'] = 'cookie';
       }
       final store = MemoryStore();
-      final service = serviceFor(
-        (_) async => kind == 'json'
+      final service = createTestLoginService(
+        handler: (_) async => kind == 'json'
             ? http.Response('<html>Error</html>', 200)
             : jsonResponse(json),
         store: store,
@@ -221,8 +202,8 @@ void main() {
         final json = sessionJson();
         (json['user'] as Map<String, dynamic>).addAll(blockedUser);
         final store = MemoryStore();
-        final service = serviceFor(
-          (_) async => jsonResponse(json),
+        final service = createTestLoginService(
+          handler: (_) async => jsonResponse(json),
           store: store,
         );
         await expectLater(
@@ -243,8 +224,8 @@ void main() {
   test(
     'Secure storage failure prevents an authenticated controller session',
     () async {
-      final service = serviceFor(
-        (_) async => jsonResponse(sessionJson()),
+      final service = createTestLoginService(
+        handler: (_) async => jsonResponse(sessionJson()),
         store: FailingStore(),
       );
       final controller = LoginController(service);
@@ -291,30 +272,67 @@ void main() {
     expect((await store.read())!.refreshToken, 'test-only-refresh');
   });
 
+  test(
+    'Logout clears local tokens even when the server is unreachable',
+    () async {
+      final store = MemoryStore()
+        ..tokens = const AuthTokens(
+          accessToken: 'test-access',
+          refreshToken: 'test-refresh',
+        );
+      final service = createTestLoginService(
+        handler: (_) async => throw http.ClientException('offline'),
+        store: store,
+      );
+      await expectLater(service.logout(), throwsA(isA<CustomException>()));
+      expect(store.tokens, isNull);
+    },
+  );
+
+  test('Secure storage persists the pair and removes it on logout', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    const store = SecureTokenStore();
+    final service = createTestLoginService(
+      handler: (request) async => request.url.path == ApiRoutes.logout
+          ? http.Response('', 204)
+          : jsonResponse(sessionJson()),
+      store: store,
+    );
+    expect(await store.read(), isNull);
+    await service.login('test@example.com', 'test-password');
+    expect((await store.read())!.accessToken, 'test-only-access');
+    expect((await store.read())!.refreshToken, 'test-only-refresh');
+    await service.logout();
+    expect(await store.read(), isNull);
+  });
+
   test('Refresh is single flight and stores the rotated pair; me and logout use Bearer', () async {
     final store = MemoryStore();
     final paths = <String>[];
     final gate = Completer<http.Response>();
-    final service = serviceFor((request) async {
-      paths.add(request.url.path);
-      if (request.url.path == ApiRoutes.login) {
-        return jsonResponse(sessionJson());
-      }
-      if (request.url.path == ApiRoutes.refresh) {
-        expect(jsonDecode(request.body), {
-          'refresh_token': 'test-only-refresh',
-        });
-        expect(request.headers['Authorization'], isNull);
-        return gate.future;
-      }
-      expect(request.headers['Authorization'], 'Bearer rotated-access');
-      if (request.url.path == ApiRoutes.me) {
-        return jsonResponse({'user': sessionJson()['user']});
-      }
-      expect(request.url.path, ApiRoutes.logout);
-      expect(jsonDecode(request.body), {'refresh_token': 'rotated-refresh'});
-      return http.Response('', 204);
-    }, store: store);
+    final service = createTestLoginService(
+      handler: (request) async {
+        paths.add(request.url.path);
+        if (request.url.path == ApiRoutes.login) {
+          return jsonResponse(sessionJson());
+        }
+        if (request.url.path == ApiRoutes.refresh) {
+          expect(jsonDecode(request.body), {
+            'refresh_token': 'test-only-refresh',
+          });
+          expect(request.headers['Authorization'], isNull);
+          return gate.future;
+        }
+        expect(request.headers['Authorization'], 'Bearer rotated-access');
+        if (request.url.path == ApiRoutes.me) {
+          return jsonResponse({'user': sessionJson()['user']});
+        }
+        expect(request.url.path, ApiRoutes.logout);
+        expect(jsonDecode(request.body), {'refresh_token': 'rotated-refresh'});
+        return http.Response('', 204);
+      },
+      store: store,
+    );
     await service.login('test@example.com', 'secret');
     final first = service.refresh();
     final second = service.refresh();
@@ -342,7 +360,9 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final service = serviceFor((_) async => jsonResponse(sessionJson()));
+    final service = createTestLoginService(
+      handler: (_) async => jsonResponse(sessionJson()),
+    );
     await tester.pumpWidget(MainApp(loginService: service));
     await tester.enterText(find.byType(TextField).first, 'test@example.com');
     await tester.enterText(find.byType(TextField).last, 'secret');
@@ -357,44 +377,4 @@ void main() {
       isFalse,
     );
   });
-}
-
-Map<String, dynamic> sessionJson() => {
-  'user': {
-    'id': 'test-user',
-    'full_name': 'Técnico de prueba',
-    'role': 'technician',
-    'active': true,
-    'email': 'test@example.com',
-    'avatar_url': null,
-    'has_signature': true,
-    'capabilities': ['field:access'],
-  },
-  'access_token': 'test-only-access',
-  'refresh_token': 'test-only-refresh',
-  'token_type': 'bearer',
-  'expires_in': 3600,
-  'refresh_expires_in': 604800,
-};
-
-http.Response jsonResponse(Object value, [int status = 200]) => http.Response(
-  jsonEncode(value),
-  status,
-  headers: {'content-type': 'application/json; charset=utf-8'},
-);
-
-class MemoryStore implements TokenStore {
-  AuthTokens? tokens;
-  @override
-  Future<AuthTokens?> read() async => tokens;
-  @override
-  Future<void> write(AuthTokens value) async => tokens = value;
-  @override
-  Future<void> clear() async => tokens = null;
-}
-
-class FailingStore extends MemoryStore {
-  @override
-  Future<void> write(AuthTokens value) async =>
-      throw Exception('Secure storage unavailable');
 }

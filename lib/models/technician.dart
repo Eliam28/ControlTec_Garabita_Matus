@@ -39,29 +39,4 @@ class Technician {
       ),
     );
   }
-
-  /// Internal DTO format; real API responses are mapped by AuthApiContract.
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'role': role,
-    'hasSignature': hasSignature,
-    if (id != null) 'id': id,
-    if (email != null) 'email': email,
-    if (avatarUrl != null) 'avatarUrl': avatarUrl,
-    'active': active,
-    'capabilities': capabilities,
-  };
-
-  factory Technician.fromJson(Map<String, dynamic> json) => Technician(
-    name: json['name'] as String,
-    role: json['role'] as String,
-    hasSignature: json['hasSignature'] as bool,
-    id: json['id'] as String?,
-    email: json['email'] as String?,
-    avatarUrl: json['avatarUrl'] as String?,
-    active: json['active'] as bool? ?? true,
-    capabilities: List<String>.unmodifiable(
-      (json['capabilities'] as List<dynamic>? ?? const []).cast<String>(),
-    ),
-  );
 }
