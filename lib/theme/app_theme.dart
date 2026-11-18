@@ -12,6 +12,8 @@ abstract final class AppColors {
   static const error = Color(0xFFD92D3B);
   static const warning = Color(0xFFFFEDB3);
   static const warningText = Color(0xFF3D3218);
+  static const success = Color(0xFF1C6B3A);
+  static const progress = Color(0xFF8A5A00);
 }
 
 abstract final class AppTheme {
@@ -46,6 +48,35 @@ abstract final class AppTheme {
     color: AppColors.muted,
   );
   static const snackBarText = TextStyle(fontSize: 16, color: AppColors.white);
+  static const screenTitle = TextStyle(
+    fontSize: 26,
+    height: 1.2,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.5,
+    color: AppColors.text,
+  );
+  static const time = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w700,
+    color: AppColors.text,
+  );
+  static const service = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    color: AppColors.primary,
+  );
+  static const cardTitle = TextStyle(
+    fontSize: 19,
+    height: 1.25,
+    fontWeight: FontWeight.w700,
+    color: AppColors.text,
+  );
+  static const body = TextStyle(
+    fontSize: 16,
+    height: 1.35,
+    color: AppColors.label,
+  );
+  static const chip = TextStyle(fontSize: 14, fontWeight: FontWeight.w700);
 
   static ThemeData get light {
     final textTheme = ThemeData().textTheme;

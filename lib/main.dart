@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'api/services/login_service.dart';
+import 'api/services/mock_my_day_api.dart';
+import 'api/services/my_day_service.dart';
 import 'api/app_config.dart';
 import 'api/app_dependencies.dart';
 import 'screens/app_routes.dart';
@@ -34,6 +36,10 @@ class _MainAppState extends State<MainApp> {
       : null;
   late final _loginService = widget.loginService ?? _dependencies!.loginService;
   late final _loginController = LoginController(_loginService);
+  // En las pruebas no hay dependencias reales: se usan los servicios ficticios.
+  late final _myDayService =
+      _dependencies?.myDayService ??
+      const MyDayService.mock(mockApi: MockMyDayApi());
 
   @override
   void dispose() {
@@ -51,9 +57,15 @@ class _MainAppState extends State<MainApp> {
       initialRoute: AppRoutes.login,
       routes: {
         AppRoutes.login: (_) => LoginScreen(controller: _loginController),
-        AppRoutes.home: (_) => _loginController.session != null
-            ? const HomeScreen()
-            : LoginScreen(controller: _loginController),
+        AppRoutes.home: (_) {
+          final session = _loginController.session;
+          return session != null
+              ? HomeScreen(
+                  myDayService: _myDayService,
+                  technicianName: session.technician.name,
+                )
+              : LoginScreen(controller: _loginController);
+        },
       },
     );
   }

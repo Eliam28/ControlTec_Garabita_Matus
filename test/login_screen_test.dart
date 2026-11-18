@@ -135,7 +135,7 @@ void main() {
   });
 
   testWidgets(
-    'Correct mock credentials open the placeholder and remove the login route',
+    'Correct mock credentials open the main screen and remove the login route',
     (tester) async {
       await openLogin(tester);
       await tester.enterText(
@@ -144,7 +144,7 @@ void main() {
       );
       await tester.enterText(find.byType(TextField).last, 'Tecnico123');
       await submit(tester);
-      expect(find.text('Trabajando en ello :)'), findsOneWidget);
+      expect(find.text('Mis servicios de hoy'), findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
       final context = tester.element(find.byType(HomeScreen));
       expect(Navigator.of(context).canPop(), isFalse);
