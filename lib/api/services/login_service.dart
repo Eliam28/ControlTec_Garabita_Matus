@@ -12,6 +12,7 @@ import '../../models/user_credentials_dto.dart';
 import '../auth_messages.dart';
 import 'auth_api_contract.dart';
 import 'auth_session_api.dart';
+import 'login_api.dart';
 import 'token_store.dart';
 
 class LoginService
@@ -40,6 +41,10 @@ class LoginService
   final AuthSessionApi? sessionApi;
   final TokenStore? tokenStore;
   AuthResponseDto? _session;
+  Future<AuthResponseDto>? _refreshInFlight;
+
+  static const invalidResponseMessage =
+      'La respuesta del servidor no es válida. Intente nuevamente';
 
   bool get isMock => contract == null;
 
@@ -51,36 +56,30 @@ class LoginService
     if (isMock && kReleaseMode) {
       throw const CustomException(message: AuthMessages.pendingApi);
     }
-    final body = await loginApi.execute(input);
-    final json = jsonDecode(body);
-    if (isMock) {
-      final response = AuthResponseDto.fromJson(json as Map<String, dynamic>);
-      if (!response.isMock || response.tokens != null) {
-        throw const FormatException('Expected mock response');
-      }
-      return _session = response;
+    final String body;
+    try {
+      body = await loginApi.execute(input);
+    } on FormatException {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
     }
-    final tokens = _readTokens(json);
-    final technician = await _fetchTechnician(tokens);
-    await tokenStore!.write(tokens);
-    return _session = AuthResponseDto.api(
-      technician: technician,
-      tokens: tokens,
-    );
+    final response = _readSession(body);
+    if (!isMock) await tokenStore!.write(response.tokens!);
+    return _session = response;
   }
 
-  Future<AuthResponseDto> refresh() => runSafely(() async {
-    if (isMock) return _requireSession();
-    final previous = await _requireTokens();
-    final body = await sessionApi!.refresh(previous);
-    final tokens = _readTokens(jsonDecode(body), previous: previous);
-    // Preserve refresh-token rotation even when the next profile request fails.
-    await tokenStore!.write(tokens);
-    return _session = AuthResponseDto.api(
-      technician: await _fetchTechnician(tokens),
-      tokens: tokens,
-    );
-  });
+  Future<AuthResponseDto> refresh() {
+    // The backend rotates refresh tokens: concurrent callers must renew once.
+    return _refreshInFlight ??= runSafely(() async {
+      if (isMock) return _requireSession();
+      final previous = await _requireTokens();
+      final response = _readSession(await sessionApi!.refresh(previous));
+      await tokenStore!.write(response.tokens!);
+      return _session = response;
+    }).whenComplete(() => _refreshInFlight = null);
+  }
 
   Future<Technician> me() => runSafely(
     () async => isMock
@@ -108,16 +107,59 @@ class LoginService
       await tokenStore!.read() ??
       (throw const CustomException(message: AuthMessages.expiredSession));
 
-  AuthTokens _readTokens(Object? response, {AuthTokens? previous}) {
-    final tokens = contract!.readTokens(response, previousTokens: previous);
-    if (tokens.accessToken.isEmpty || tokens.refreshToken.isEmpty) {
-      throw const FormatException('Empty tokens');
+  AuthResponseDto _readSession(String body) {
+    try {
+      final json = jsonDecode(body);
+      final response = isMock
+          ? AuthResponseDto.fromJson(json as Map<String, dynamic>)
+          : contract!.readSession(json);
+      final tokens = response.tokens;
+      if (response.isMock != isMock ||
+          (isMock && tokens != null) ||
+          (!isMock &&
+              (tokens == null ||
+                  tokens.accessToken.trim().isEmpty ||
+                  tokens.refreshToken.trim().isEmpty))) {
+        throw const FormatException('Invalid session');
+      }
+      if (!isMock &&
+          (!response.technician.active ||
+              response.technician.role == 'customer')) {
+        throw const CustomException(
+          message: LoginApi.accessDeniedMessage,
+          code: 'forbidden',
+        );
+      }
+      return response;
+    } on FormatException {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
+    } on TypeError {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
     }
-    return tokens;
   }
 
-  Future<Technician> _fetchTechnician(AuthTokens tokens) async =>
-      contract!.readTechnician(jsonDecode(await sessionApi!.execute(tokens)));
+  Future<Technician> _fetchTechnician(AuthTokens tokens) async {
+    final body = await sessionApi!.execute(tokens);
+    try {
+      return contract!.readTechnician(jsonDecode(body));
+    } on FormatException {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
+    } on TypeError {
+      throw const CustomException(
+        message: invalidResponseMessage,
+        code: 'invalid_response',
+      );
+    }
+  }
 
   void dispose() => _session = null;
 }

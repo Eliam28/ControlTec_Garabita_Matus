@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:controltec_app/api/app_config.dart';
 import 'package:controltec_app/api/app_dependencies.dart';
-import 'package:controltec_app/api/auth_messages.dart';
 import 'package:controltec_app/api/services/login_api.dart';
 import 'package:controltec_app/api/services/login_service.dart';
 import 'package:controltec_app/base/abstract_api_handler.dart';
@@ -65,7 +64,7 @@ void main() {
 
   test('Mock configuration never constructs an HTTP client', () async {
     final dependencies = http.runWithClient(
-      () => AppDependencies.fromConfig(const AppConfig()),
+      () => AppDependencies.fromConfig(const AppConfig(mockAuth: true)),
       () => throw StateError('HTTP client must not be created in mock mode'),
     );
     addTearDown(dependencies.dispose);
@@ -113,7 +112,7 @@ void main() {
           isA<CustomException>().having(
             (error) => error.message,
             'message',
-            AuthMessages.unavailable,
+            LoginService.invalidResponseMessage,
           ),
         ),
       );

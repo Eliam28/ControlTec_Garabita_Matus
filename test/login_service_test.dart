@@ -11,6 +11,7 @@ import 'package:controltec_app/api/api_routes.dart';
 import 'package:controltec_app/api/auth_messages.dart';
 import 'package:controltec_app/models/user_credentials_dto.dart';
 import 'package:controltec_app/models/auth_tokens.dart';
+import 'package:controltec_app/models/auth_response_dto.dart';
 import 'package:controltec_app/models/technician.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -94,9 +95,7 @@ void main() {
     expect(paths, [
       '/api${ApiRoutes.login}',
       '/api${ApiRoutes.me}',
-      '/api${ApiRoutes.me}',
       '/api${ApiRoutes.refresh}',
-      '/api${ApiRoutes.me}',
       '/api${ApiRoutes.logout}',
     ]);
   });
@@ -121,36 +120,13 @@ void main() {
             'message',
             status == 401
                 ? AuthMessages.invalidCredentials
-                : AuthMessages.unavailable,
+                : LoginApi.serverMessage,
           ),
         ),
       );
       expect(store.tokens, isNull);
     });
   }
-
-  test(
-    'Profile failure does not persist the tokens from an incomplete login',
-    () async {
-      final store = MemoryTokenStore();
-      final service = createApiService(
-        baseUrl: 'https://example.com',
-        contract: TestContract(),
-        tokenStore: store,
-        client: MockClient(
-          (request) async => request.url.path == ApiRoutes.login
-              ? http.Response('["a", "r"]', 200)
-              : http.Response('', 401),
-        ),
-      );
-      addTearDown(service.dispose);
-      await expectLater(
-        service.execute(credentials),
-        throwsA(isA<CustomException>()),
-      );
-      expect(store.tokens, isNull);
-    },
-  );
 
   test(
     'Logout clears local storage even when the server is unreachable',
@@ -183,14 +159,14 @@ void main() {
           isA<CustomException>().having(
             (e) => e.message,
             'message',
-            AuthMessages.unavailable,
+            LoginService.invalidResponseMessage,
           ),
         ),
       );
     });
   }
 
-  test('Timeout becomes a connection error', () async {
+  test('Timeout has its own safe error message', () async {
     final service = createApiService(
       baseUrl: 'https://example.com',
       contract: TestContract(),
@@ -208,7 +184,7 @@ void main() {
         isA<CustomException>().having(
           (e) => e.message,
           'message',
-          AuthMessages.connection,
+          LoginApi.timeoutMessage,
         ),
       ),
     );
@@ -262,7 +238,7 @@ class MemoryTokenStore implements TokenStore {
   Future<void> clear() async => tokens = null;
 }
 
-/// Test fixture only. This schema is deliberately unrelated to the pending API.
+/// Test fixture only. This schema is deliberately unrelated to FastAPI.
 class TestContract implements AuthApiContract {
   AuthRequestBody _body(Object data) =>
       AuthRequestBody(body: jsonEncode(data), contentType: 'application/json');
@@ -276,11 +252,18 @@ class TestContract implements AuthApiContract {
   @override
   AuthRequestBody logoutBody(String refreshToken) => _body([refreshToken]);
   @override
-  AuthTokens readTokens(Object? response, {AuthTokens? previousTokens}) {
+  AuthResponseDto readSession(Object? response) {
     final list = response as List<dynamic>;
-    return AuthTokens(
-      accessToken: list[0] as String,
-      refreshToken: list[1] as String,
+    return AuthResponseDto.api(
+      technician: const Technician(
+        name: 'Technician',
+        role: 'technician',
+        hasSignature: false,
+      ),
+      tokens: AuthTokens(
+        accessToken: list[0] as String,
+        refreshToken: list[1] as String,
+      ),
     );
   }
 

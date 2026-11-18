@@ -4,7 +4,7 @@ class UserCredentialsDto {
   final String email;
   final String password;
 
-  /// Internal representation only; FastAPI field names remain in its contract.
+  /// Required fields of LoginRequest; passwords are sent without trimming.
   Map<String, dynamic> toJson() => {'email': email, 'password': password};
 
   factory UserCredentialsDto.fromJson(Map<String, dynamic> json) =>

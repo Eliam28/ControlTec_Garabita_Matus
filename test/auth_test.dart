@@ -115,7 +115,7 @@ void main() {
     );
 
     test('Configuration selects mock or REST without changing the UI', () {
-      final mock = AppDependencies.fromConfig(const AppConfig());
+      final mock = AppDependencies.fromConfig(const AppConfig(mockAuth: true));
       final api = AppDependencies.fromConfig(const AppConfig(mockAuth: false));
       expect(mock.loginService.loginApi, isA<MockLoginApi>());
       expect(mock.loginService.isMock, isTrue);

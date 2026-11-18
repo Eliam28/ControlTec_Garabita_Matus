@@ -4,22 +4,64 @@ class Technician {
     required this.name,
     required this.role,
     required this.hasSignature,
+    this.id,
+    this.email,
+    this.avatarUrl,
+    this.active = true,
+    this.capabilities = const [],
   });
 
   final String name;
   final String role;
   final bool hasSignature;
+  final String? id;
+  final String? email;
+  final String? avatarUrl;
+  final bool active;
+  final List<String> capabilities;
+
+  /// SessionUserRead from the mobile login/me responses in OpenAPI.
+  factory Technician.fromApiJson(Map<String, dynamic> json) {
+    final role = json['role'] as String;
+    if (!const ['owner', 'admin', 'technician', 'customer'].contains(role)) {
+      throw const FormatException('Invalid user role');
+    }
+    return Technician(
+      id: json['id'] as String,
+      name: json['full_name'] as String,
+      role: role,
+      active: json['active'] as bool,
+      email: json['email'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
+      hasSignature: json['has_signature'] as bool? ?? false,
+      capabilities: List<String>.unmodifiable(
+        (json['capabilities'] as List<dynamic>? ?? const []).cast<String>(),
+      ),
+    );
+  }
 
   /// Internal DTO format; real API responses are mapped by AuthApiContract.
   Map<String, dynamic> toJson() => {
     'name': name,
     'role': role,
     'hasSignature': hasSignature,
+    if (id != null) 'id': id,
+    if (email != null) 'email': email,
+    if (avatarUrl != null) 'avatarUrl': avatarUrl,
+    'active': active,
+    'capabilities': capabilities,
   };
 
   factory Technician.fromJson(Map<String, dynamic> json) => Technician(
     name: json['name'] as String,
     role: json['role'] as String,
     hasSignature: json['hasSignature'] as bool,
+    id: json['id'] as String?,
+    email: json['email'] as String?,
+    avatarUrl: json['avatarUrl'] as String?,
+    active: json['active'] as bool? ?? true,
+    capabilities: List<String>.unmodifiable(
+      (json['capabilities'] as List<dynamic>? ?? const []).cast<String>(),
+    ),
   );
 }
