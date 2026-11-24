@@ -364,6 +364,7 @@ void main() {
       handler: (_) async => jsonResponse(sessionJson()),
     );
     await tester.pumpWidget(MainApp(loginService: service));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'test@example.com');
     await tester.enterText(find.byType(TextField).last, 'secret');
     await tester.tap(find.byType(FilledButton));
