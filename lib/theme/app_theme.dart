@@ -162,6 +162,40 @@ abstract final class AppTheme {
     side: const WidgetStatePropertyAll(BorderSide(color: AppColors.error)),
   );
 
+  static const applicationTitle = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w500,
+    color: AppColors.text,
+  );
+  static const applicationHint = TextStyle(
+    fontSize: 18,
+    height: 1.35,
+    color: AppColors.hint,
+  );
+  static const applicationInputPadding = EdgeInsets.symmetric(
+    horizontal: 16,
+    vertical: 14,
+  );
+
+  static final applicationButton = FilledButton.styleFrom(
+    minimumSize: const Size(double.infinity, 54),
+    disabledBackgroundColor: AppColors.primary,
+    disabledForegroundColor: AppColors.white,
+    textStyle: ThemeData().textTheme.labelLarge!.copyWith(
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+    ),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  );
+
+  static RoundedRectangleBorder applicationTechniqueShape(bool selected) =>
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(26),
+        side: BorderSide(
+          color: selected ? AppColors.primary : AppColors.border,
+        ),
+      );
+
   static ThemeData get light {
     final textTheme = ThemeData().textTheme;
     return ThemeData(

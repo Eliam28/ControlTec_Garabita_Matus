@@ -12,6 +12,8 @@ abstract final class ApiRoutes {
       '/scheduling/visits/$visitId/report/start';
   static String reportContext(String visitId) =>
       '/reports/visits/$visitId/context';
+  static String reportProducts(String visitId) =>
+      '/reports/visits/$visitId/products';
   static String reportStation(String visitId, String stationId) =>
       '/reports/visits/$visitId/stations/$stationId';
   static String completeReport(String visitId) =>

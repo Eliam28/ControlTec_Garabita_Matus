@@ -7,6 +7,7 @@ import 'package:http_parser/http_parser.dart';
 
 import '../../base/custom_exception.dart';
 import '../../models/report_context.dart';
+import '../../models/report_product.dart';
 import '../api_routes.dart';
 import '../auth_messages.dart';
 import 'token_store.dart';
@@ -33,6 +34,20 @@ class ReportService {
       http.Request('GET', _uri(ApiRoutes.reportContext(visitId))),
     );
     return ReportContext.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// La API reemplaza la lista completa y devuelve las aplicaciones resueltas.
+  Future<List<AppliedProduct>> saveProducts(
+    String visitId,
+    List<Map<String, dynamic>> products,
+  ) async {
+    final request = http.Request('PUT', _uri(ApiRoutes.reportProducts(visitId)))
+      ..headers['Content-Type'] = 'application/json'
+      ..body = jsonEncode({'products': products});
+    final body = await _send(request);
+    return (jsonDecode(body) as List)
+        .map((p) => AppliedProduct.fromJson(p as Map<String, dynamic>))
+        .toList();
   }
 
   /// Guarda la inspección de una estación. Guardarla otra vez la corrige.

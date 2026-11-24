@@ -1,3 +1,5 @@
+import 'report_product.dart';
+
 /// Lo que responde GET /reports/visits/{id}/context: todo lo que necesita
 /// el reporte (cliente, estaciones, plagas y lo que ya se capturó).
 class ReportContext {
@@ -12,6 +14,8 @@ class ReportContext {
     required this.generalNotes,
     required this.stations,
     required this.pests,
+    this.products = const [],
+    this.productOptions = const [],
   });
 
   final String visitId;
@@ -24,6 +28,8 @@ class ReportContext {
   final String generalNotes;
   final List<ReportStation> stations;
   final List<Option> pests;
+  final List<AppliedProduct> products;
+  final List<CatalogProduct> productOptions;
 
   int get doneStations => stations.where((s) => s.isDone).length;
 
@@ -41,6 +47,12 @@ class ReportContext {
           : charged,
       recommendations: json['recommendations'] as String? ?? '',
       generalNotes: json['general_notes'] as String? ?? '',
+      products: (json['products'] as List? ?? [])
+          .map((p) => AppliedProduct.fromJson(p as Map<String, dynamic>))
+          .toList(),
+      productOptions: (json['product_options'] as List? ?? [])
+          .map((p) => CatalogProduct.fromJson(p as Map<String, dynamic>))
+          .toList(),
       stations: (json['stations'] as List)
           .map((s) => ReportStation.fromJson(s as Map<String, dynamic>))
           .toList(),
