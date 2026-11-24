@@ -4,6 +4,7 @@ import '../api/services/report_service.dart';
 import '../base/custom_exception.dart';
 import '../models/report_context.dart';
 import '../theme/app_theme.dart';
+import 'signoff_tab.dart';
 import 'station_screen.dart';
 
 /// El reporte de un servicio en curso, con dos pestañas:
@@ -102,7 +103,11 @@ class _ReportScreenState extends State<ReportScreen> {
                 report: report,
                 onOpen: (i) => _openStation(report, i),
               ),
-              const SizedBox(),
+              SignoffTab(
+                service: widget.service,
+                report: report,
+                onCompleted: (_) => Navigator.of(context).pop(),
+              ),
             ],
           ),
         ),
