@@ -21,6 +21,7 @@ void main() {
           : jsonResponse({'detail': 'Invalid credentials'}, status),
     );
     await tester.pumpWidget(MainApp(loginService: service));
+    await tester.pumpAndSettle();
   }
 
   Future<void> submit(WidgetTester tester) async {
@@ -164,6 +165,7 @@ void main() {
       final api = PendingLoginResponse();
       final service = createTestLoginService(handler: api.handle);
       await tester.pumpWidget(MainApp(key: UniqueKey(), loginService: service));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'test@example.com');
       await tester.enterText(find.byType(TextField).last, 'http-test-password');
       await tester.tap(find.byType(FilledButton));

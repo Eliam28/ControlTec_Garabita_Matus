@@ -41,6 +41,12 @@ class LoginService
   final AuthSessionApi? sessionApi;
   final TokenStore? tokenStore;
   Future<AuthResponseDto>? _refreshInFlight;
+  int _sessionRevision = 0;
+  bool _disposed = false;
+  void Function()? onSessionInvalidated;
+  void Function(AuthResponseDto)? onSessionUpdated;
+
+  int get sessionRevision => _sessionRevision;
 
   static const invalidResponseMessage =
       'La respuesta del servidor no es válida. Intente nuevamente';
@@ -51,6 +57,7 @@ class LoginService
   @override
   Future<AuthResponseDto> doExecute(UserCredentialsDto input) async {
     _requireConfiguration();
+    final revision = _sessionRevision;
     final String body;
     try {
       body = await loginApi!.execute(input);
@@ -61,18 +68,73 @@ class LoginService
       );
     }
     final response = _readSession(body);
-    await tokenStore!.write(response.tokens);
+    await _storeSession(response, revision);
     return response;
   }
+
+  /// A saved token pair is only a candidate: /me or refresh must confirm it.
+  Future<AuthResponseDto?> restoreSession() => runSafely(() async {
+    _requireConfiguration();
+    final revision = _sessionRevision;
+    final tokens = await tokenStore!.read();
+    if (tokens == null) return null;
+    if (tokens.refreshExpired(DateTime.now().toUtc())) {
+      await invalidateSession();
+      return null;
+    }
+    if (tokens.accessExpired(DateTime.now().toUtc())) {
+      try {
+        return await refresh();
+      } on CustomException catch (error) {
+        if (_definitelyInvalid(error)) return null;
+        rethrow;
+      }
+    }
+    try {
+      final technician = await _fetchTechnician(tokens);
+      _validateTechnician(technician);
+      _checkRevision(revision);
+      return AuthResponseDto.api(technician: technician, tokens: tokens);
+    } on CustomException catch (error) {
+      if (error.status == 401) {
+        try {
+          return await refresh();
+        } on CustomException catch (refreshError) {
+          if (_definitelyInvalid(refreshError)) return null;
+          rethrow;
+        }
+      }
+      if (_definitelyInvalid(error)) {
+        await invalidateSession();
+        return null;
+      }
+      rethrow;
+    }
+  });
 
   Future<AuthResponseDto> refresh() {
     // The backend rotates refresh tokens: concurrent callers must renew once.
     return _refreshInFlight ??= runSafely(() async {
       _requireConfiguration();
+      final revision = _sessionRevision;
       final previous = await _requireTokens();
-      final response = _readSession(await sessionApi!.refresh(previous));
-      await tokenStore!.write(response.tokens);
-      return response;
+      try {
+        if (previous.refreshExpired(DateTime.now().toUtc())) {
+          throw const CustomException(
+            message: AuthMessages.expiredSession,
+            status: 401,
+          );
+        }
+        final response = _readSession(await sessionApi!.refresh(previous));
+        await _storeSession(response, revision);
+        if (!_disposed) onSessionUpdated?.call(response);
+        return response;
+      } on CustomException catch (error) {
+        if (_definitelyInvalid(error) && revision == _sessionRevision) {
+          await invalidateSession();
+        }
+        rethrow;
+      }
     }).whenComplete(() => _refreshInFlight = null);
   }
 
@@ -83,13 +145,56 @@ class LoginService
 
   Future<void> logout() => runSafely(() async {
     _requireConfiguration();
+    _sessionRevision++;
     try {
       final tokens = await tokenStore!.read();
       if (tokens != null) await sessionApi!.logout(tokens);
     } finally {
-      await tokenStore!.clear();
+      await invalidateSession();
     }
   });
+
+  Future<void> invalidateSession() async {
+    _sessionRevision++;
+    try {
+      await tokenStore?.clear();
+    } finally {
+      if (!_disposed) onSessionInvalidated?.call();
+    }
+  }
+
+  bool _definitelyInvalid(CustomException error) =>
+      error.status == 401 ||
+      error.status == 403 ||
+      error.status == 422 ||
+      error.code == 'forbidden';
+
+  Future<void> _storeSession(AuthResponseDto response, int revision) async {
+    _checkRevision(revision);
+    await tokenStore!.write(response.tokens);
+    if (revision != _sessionRevision) {
+      await tokenStore!.clear();
+      _checkRevision(revision);
+    }
+  }
+
+  void _checkRevision(int revision) {
+    if (_disposed || revision != _sessionRevision) {
+      throw const CustomException(
+        message: AuthMessages.expiredSession,
+        code: 'stale_session',
+      );
+    }
+  }
+
+  void _validateTechnician(Technician technician) {
+    if (!technician.active || technician.role == 'customer') {
+      throw const CustomException(
+        message: LoginApi.accessDeniedMessage,
+        code: 'forbidden',
+      );
+    }
+  }
 
   void _requireConfiguration() {
     if (loginApi == null ||
@@ -105,19 +210,16 @@ class LoginService
 
   Future<AuthTokens> _requireTokens() async =>
       await tokenStore!.read() ??
-      (throw const CustomException(message: AuthMessages.expiredSession));
+      (throw const CustomException(
+        message: AuthMessages.expiredSession,
+        status: 401,
+      ));
 
   AuthResponseDto _readSession(String body) {
     try {
       final json = jsonDecode(body);
       final response = contract!.readSession(json);
-      if (!response.technician.active ||
-          response.technician.role == 'customer') {
-        throw const CustomException(
-          message: LoginApi.accessDeniedMessage,
-          code: 'forbidden',
-        );
-      }
+      _validateTechnician(response.technician);
       return response;
     } on FormatException {
       throw const CustomException(
@@ -149,5 +251,11 @@ class LoginService
     }
   }
 
-  void dispose() => _refreshInFlight = null;
+  void dispose() {
+    _disposed = true;
+    _sessionRevision++;
+    onSessionInvalidated = null;
+    onSessionUpdated = null;
+    _refreshInFlight = null;
+  }
 }

@@ -14,6 +14,7 @@ abstract final class AppColors {
   static const warningText = Color(0xFF3D3218);
   static const success = Color(0xFF1C6B3A);
   static const progress = Color(0xFF8A5A00);
+  static const profileTag = Color(0xFF10B5D7);
 }
 
 abstract final class AppTheme {
@@ -89,6 +90,76 @@ abstract final class AppTheme {
     fontSize: 15,
     fontWeight: FontWeight.w700,
     color: AppColors.label,
+  );
+
+  static const profileName = TextStyle(
+    fontSize: 26,
+    height: 1.2,
+    fontWeight: FontWeight.w800,
+    color: AppColors.text,
+  );
+  static const avatarInitial = TextStyle(
+    fontSize: 28,
+    fontWeight: FontWeight.w800,
+    color: AppColors.white,
+  );
+  static const profileBody = TextStyle(
+    fontSize: 15,
+    height: 1.35,
+    color: AppColors.muted,
+  );
+  static const profileValue = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    color: AppColors.text,
+  );
+  static const profileHeading = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w800,
+    color: AppColors.text,
+  );
+  static const photoHelp = TextStyle(
+    fontSize: 12,
+    height: 1.3,
+    color: AppColors.muted,
+  );
+
+  static final profileCard = BoxDecoration(
+    color: AppColors.white,
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: AppColors.border),
+    boxShadow: const [
+      BoxShadow(color: Color(0x0C000000), blurRadius: 3, offset: Offset(0, 1)),
+    ],
+  );
+
+  static final profilePrimaryButton = FilledButton.styleFrom(
+    disabledBackgroundColor: AppColors.border,
+    disabledForegroundColor: AppColors.muted,
+    minimumSize: const Size(double.infinity, 54),
+    textStyle: ThemeData().textTheme.labelLarge!.copyWith(
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  );
+
+  static final profileSecondaryButton = OutlinedButton.styleFrom(
+    foregroundColor: AppColors.primary,
+    minimumSize: const Size(double.infinity, 54),
+    textStyle: ThemeData().textTheme.labelLarge!.copyWith(
+      fontSize: 16,
+      fontWeight: FontWeight.w700,
+    ),
+    side: const BorderSide(color: AppColors.primary),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  );
+
+  static final logoutButton = profileSecondaryButton.copyWith(
+    foregroundColor: const WidgetStatePropertyAll(AppColors.error),
+    side: const WidgetStatePropertyAll(BorderSide(color: AppColors.error)),
   );
 
   static ThemeData get light {

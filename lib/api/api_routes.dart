@@ -4,6 +4,8 @@ abstract final class ApiRoutes {
   static const logout = '/auth/mobile/logout';
   static const me = '/auth/mobile/me';
   static const myDay = '/scheduling/my-day';
+  static const signature = '/profile/signature';
+  static const signatureImage = '/profile/signature/image';
 
   // Reporte de un servicio.
   static String startReport(String visitId) =>
