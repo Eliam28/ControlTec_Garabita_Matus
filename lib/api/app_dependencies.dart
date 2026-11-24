@@ -8,18 +8,25 @@ import 'services/mock_login_api.dart';
 import 'services/mock_my_day_api.dart';
 import 'services/my_day_api.dart';
 import 'services/my_day_service.dart';
+import 'services/report_service.dart';
 import 'services/token_store.dart';
 import 'app_config.dart';
 
 /// Owns the single HTTP client used by every API. Mock mode creates none.
 class AppDependencies {
-  AppDependencies._(this.loginService, this.myDayService, this._httpClient);
+  AppDependencies._(
+    this.loginService,
+    this.myDayService,
+    this.reportService,
+    this._httpClient,
+  );
 
   factory AppDependencies.fromConfig(AppConfig config) {
     if (config.useMockAuth) {
       return AppDependencies._(
         LoginService.mock(loginApi: const MockLoginApi()),
         const MyDayService.mock(mockApi: MockMyDayApi()),
+        null,
         null,
       );
     }
@@ -44,11 +51,24 @@ class AppDependencies {
       api: MyDayApi(httpClient: httpClient, baseUrl: config.apiBaseUrl),
       tokenStore: const SecureTokenStore(),
     );
-    return AppDependencies._(loginService, myDayService, httpClient);
+    final reportService = ReportService(
+      httpClient: httpClient,
+      baseUrl: config.apiBaseUrl,
+      tokenStore: const SecureTokenStore(),
+    );
+    return AppDependencies._(
+      loginService,
+      myDayService,
+      reportService,
+      httpClient,
+    );
   }
 
   final LoginService loginService;
   final MyDayService myDayService;
+
+  /// Solo existe con la API real: el reporte no tiene datos de prueba.
+  final ReportService? reportService;
   final http.Client? _httpClient;
 
   void dispose() {

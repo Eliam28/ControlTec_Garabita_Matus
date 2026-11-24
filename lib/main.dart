@@ -62,6 +62,7 @@ class _MainAppState extends State<MainApp> {
           return session != null
               ? HomeScreen(
                   myDayService: _myDayService,
+                  reportService: _dependencies?.reportService,
                   technicianName: session.technician.name,
                 )
               : LoginScreen(controller: _loginController);

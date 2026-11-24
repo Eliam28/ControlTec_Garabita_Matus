@@ -15,6 +15,7 @@ class MockMyDayApi implements Handler<void, String> {
       'date': today,
       'visits': [
         {
+          'id': 'visita-1',
           'status': 'completado',
           'scheduled_time_start': '09:00:00',
           'scheduled_time_end': '09:45:00',
@@ -24,6 +25,7 @@ class MockMyDayApi implements Handler<void, String> {
           'notes': 'Revisar los 3 cebaderos.',
         },
         {
+          'id': 'visita-2',
           'status': 'en_progreso',
           'scheduled_time_start': '11:00:00',
           'scheduled_time_end': '12:00:00',
@@ -33,6 +35,7 @@ class MockMyDayApi implements Handler<void, String> {
           'notes': 'Tocar el timbre dos veces.',
         },
         {
+          'id': 'visita-3',
           'status': 'programado',
           'scheduled_time_start': '15:00:00',
           'scheduled_time_end': '15:40:00',
@@ -41,6 +44,7 @@ class MockMyDayApi implements Handler<void, String> {
           'location_address': 'Av. Imaginaria 450, Col. Playa, Mérida',
         },
         {
+          'id': 'visita-4',
           'status': 'programado',
           'scheduled_time_start': '17:00:00',
           'scheduled_time_end': '17:45:00',
