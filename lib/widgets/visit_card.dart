@@ -21,6 +21,8 @@ class VisitCard extends StatelessWidget {
   String? get _actionLabel => switch (visit.status) {
     'programado' => 'Iniciar servicio',
     'en_progreso' => 'Continuar servicio',
+    // Ya firmado, pero falta decir si el cliente pagó.
+    'completado' when visit.paymentStatus == 'pendiente' => 'Registrar pago',
     _ => null,
   };
 

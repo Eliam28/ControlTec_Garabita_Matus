@@ -106,7 +106,9 @@ class _ReportScreenState extends State<ReportScreen> {
               SignoffTab(
                 service: widget.service,
                 report: report,
-                onCompleted: (_) => Navigator.of(context).pop(),
+                // Se cierra devolviendo el estado de pago a la pantalla de inicio.
+                onCompleted: (paymentStatus) =>
+                    Navigator.of(context).pop(paymentStatus),
               ),
             ],
           ),

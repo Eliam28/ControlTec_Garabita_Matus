@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_brand.dart';
 import '../widgets/app_snack_bar.dart';
 import '../widgets/visit_card.dart';
+import 'payment_screen.dart';
 import 'report_screen.dart';
 
 /// Pantalla principal: los servicios que el técnico tiene agendados hoy.
@@ -50,25 +51,46 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Inicia el servicio si estaba programado y abre su reporte.
+  /// Al firmarlo, si falta decir si el cliente pagó, abre la pantalla de pago.
   Future<void> _openVisit(FieldVisit visit) async {
     final service = widget.reportService!;
-    if (visit.status == 'programado') {
-      setState(() => _startingId = visit.id);
-      try {
-        await service.start(visit.id);
-      } on CustomException catch (error) {
-        if (mounted) AppSnackBar.error(context, error.message);
-        return;
-      } finally {
-        if (mounted) setState(() => _startingId = null);
+    final navigator = Navigator.of(context);
+    var paymentStatus = visit.paymentStatus;
+    if (visit.status != 'completado') {
+      if (visit.status == 'programado') {
+        setState(() => _startingId = visit.id);
+        try {
+          await service.start(visit.id);
+        } on CustomException catch (error) {
+          if (mounted) AppSnackBar.error(context, error.message);
+          return;
+        } finally {
+          if (mounted) setState(() => _startingId = null);
+        }
       }
+      // Si el técnico sale sin firmar, vuelve null y no se pregunta el pago.
+      final result = await navigator.push<String>(
+        MaterialPageRoute(
+          builder: (_) => ReportScreen(service: service, visitId: visit.id),
+        ),
+      );
+      if (result == null) {
+        _reload();
+        return;
+      }
+      paymentStatus = result;
     }
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ReportScreen(service: service, visitId: visit.id),
-      ),
-    );
+    if (paymentStatus == 'pendiente') {
+      await navigator.push<void>(
+        MaterialPageRoute(
+          builder: (_) => PaymentScreen(
+            service: service,
+            visitId: visit.id,
+            customerName: visit.customerName,
+          ),
+        ),
+      );
+    }
     // Al volver, la tarjeta cambia de estado: se vuelve a pedir el día.
     _reload();
   }
