@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../api/services/report_service.dart';
+import '../api/services/report_products_service.dart';
 import '../base/custom_exception.dart';
 import '../models/report_context.dart';
 import '../theme/app_theme.dart';
+import 'applied_products_tab.dart';
+import 'controllers/report_products_controller.dart';
 import 'signoff_tab.dart';
 import 'station_screen.dart';
 
-/// El reporte de un servicio en curso, con dos pestañas:
-/// las estaciones que hay que revisar y la firma del cliente.
+/// El reporte conserva sus estaciones y firma e intercala los productos.
 class ReportScreen extends StatefulWidget {
   const ReportScreen({required this.service, required this.visitId, super.key});
 
@@ -19,12 +21,45 @@ class ReportScreen extends StatefulWidget {
   State<ReportScreen> createState() => _ReportScreenState();
 }
 
-class _ReportScreenState extends State<ReportScreen> {
-  late Future<ReportContext> _report = widget.service.load(widget.visitId);
+class _ReportScreenState extends State<ReportScreen>
+    with SingleTickerProviderStateMixin {
+  late final _tabs = TabController(length: 3, vsync: this)
+    ..addListener(_stageChanged);
+  late final _products = ReportProductsController(
+    visitId: widget.visitId,
+    service: ReportProductsService(widget.service),
+  );
+  late Future<ReportContext> _report = _loadReport();
+
+  Future<ReportContext> _loadReport() async {
+    final report = await widget.service.load(widget.visitId);
+    if (mounted) _products.acceptContext(report);
+    return report;
+  }
+
+  void _stageChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _back() {
+    if (_tabs.index > 0) {
+      _tabs.animateTo(_tabs.index - 1);
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabs.removeListener(_stageChanged);
+    _tabs.dispose();
+    _products.dispose();
+    super.dispose();
+  }
 
   void _reload() {
     setState(() {
-      _report = widget.service.load(widget.visitId);
+      _report = _loadReport();
     });
   }
 
@@ -73,11 +108,15 @@ class _ReportScreenState extends State<ReportScreen> {
         );
       }
       final report = snapshot.data!;
-      return DefaultTabController(
-        length: 2,
+      return PopScope(
+        canPop: _tabs.index == 0,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _back();
+        },
         child: Scaffold(
           appBar: AppBar(
             backgroundColor: AppColors.white,
+            leading: BackButton(onPressed: _back),
             titleSpacing: 0,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,19 +128,27 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
               ],
             ),
-            bottom: const TabBar(
+            bottom: TabBar(
+              controller: _tabs,
               labelStyle: AppTheme.chip,
-              tabs: [
+              tabs: const [
                 Tab(text: 'Estaciones'),
+                Tab(text: 'Aplicación'),
                 Tab(text: 'Firma'),
               ],
             ),
           ),
           body: TabBarView(
+            controller: _tabs,
             children: [
               _StationsTab(
                 report: report,
                 onOpen: (i) => _openStation(report, i),
+                onContinue: () => _tabs.animateTo(1),
+              ),
+              AppliedProductsTab(
+                controller: _products,
+                onContinue: () => _tabs.animateTo(2),
               ),
               SignoffTab(
                 service: widget.service,
@@ -120,10 +167,15 @@ class _ReportScreenState extends State<ReportScreen> {
 
 /// Pestaña 1: la lista de estaciones con cuántas van revisadas.
 class _StationsTab extends StatelessWidget {
-  const _StationsTab({required this.report, required this.onOpen});
+  const _StationsTab({
+    required this.report,
+    required this.onOpen,
+    required this.onContinue,
+  });
 
   final ReportContext report;
   final void Function(int index) onOpen;
+  final VoidCallback onContinue;
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +204,7 @@ class _StationsTab extends StatelessWidget {
               const SizedBox(height: 16),
               if (total == 0)
                 const Text(
-                  'Este servicio no tiene estaciones. Pasa a la firma.',
+                  'Este servicio no tiene estaciones. Continúa a productos aplicados.',
                   style: AppTheme.body,
                   textAlign: TextAlign.center,
                 ),
@@ -173,7 +225,7 @@ class _StationsTab extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: FilledButton(
               style: FilledButton.styleFrom(minimumSize: const Size(0, 54)),
-              onPressed: () => DefaultTabController.of(context).animateTo(1),
+              onPressed: onContinue,
               child: const Text('Continuar'),
             ),
           ),

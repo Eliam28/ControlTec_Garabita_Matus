@@ -7,8 +7,12 @@ import 'package:http_parser/http_parser.dart';
 
 import '../../base/custom_exception.dart';
 import '../../models/report_context.dart';
+import '../../models/report_product.dart';
+import '../../models/technician.dart';
 import '../api_routes.dart';
 import '../auth_messages.dart';
+import 'profile_api.dart';
+import 'profile_service.dart';
 import 'token_store.dart';
 
 /// Todas las peticiones del reporte de un servicio:
@@ -35,6 +39,32 @@ class ReportService {
     return ReportContext.fromJson(jsonDecode(body) as Map<String, dynamic>);
   }
 
+  /// Perfil del técnico autenticado, usando el mismo cliente y renovación.
+  Future<Technician> profile() async {
+    final body = await _send(http.Request('GET', _uri(ApiRoutes.profile)));
+    return Technician.fromApiJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// Reutiliza la consulta autenticada de firma que ya usa el perfil.
+  Future<Uint8List> profileSignature() => ProfileService(
+    api: ProfileApi(httpClient: httpClient, baseUrl: baseUrl),
+    tokenStore: tokenStore,
+  ).signature();
+
+  /// La API reemplaza la lista completa y devuelve las aplicaciones resueltas.
+  Future<List<AppliedProduct>> saveProducts(
+    String visitId,
+    List<Map<String, dynamic>> products,
+  ) async {
+    final request = http.Request('PUT', _uri(ApiRoutes.reportProducts(visitId)))
+      ..headers['Content-Type'] = 'application/json'
+      ..body = jsonEncode({'products': products});
+    final body = await _send(request);
+    return (jsonDecode(body) as List)
+        .map((p) => AppliedProduct.fromJson(p as Map<String, dynamic>))
+        .toList();
+  }
+
   /// Guarda la inspección de una estación. Guardarla otra vez la corrige.
   Future<void> saveStation({
     required String visitId,
@@ -57,6 +87,7 @@ class ReportService {
     return _send(request);
   }
 
+  /// El servidor usa la firma del perfil cuando no se envía una nueva.
   /// Cierra el reporte con las dos firmas. Devuelve el estado de pago:
   /// «pendiente» si falta preguntar si pagó, «pagado» si el servicio era de $0.
   Future<String> complete({
@@ -66,7 +97,7 @@ class ReportService {
     required String recommendations,
     required String notes,
     required Uint8List signature,
-    required Uint8List technicianSignature,
+    Uint8List? technicianSignature,
   }) async {
     final request = http.MultipartRequest(
       'POST',
@@ -81,7 +112,8 @@ class ReportService {
     });
     request.files.addAll([
       _png('signature', signature),
-      _png('technician_signature', technicianSignature),
+      if (technicianSignature != null)
+        _png('technician_signature', technicianSignature),
     ]);
     final body = await _send(request);
     final json = jsonDecode(body) as Map<String, dynamic>;
