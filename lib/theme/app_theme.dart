@@ -77,6 +77,19 @@ abstract final class AppTheme {
     color: AppColors.label,
   );
   static const chip = TextStyle(fontSize: 14, fontWeight: FontWeight.w700);
+  // Código de la estación (CB-001): letra de ancho fijo, como en la etiqueta.
+  static const stationCode = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w700,
+    fontFamily: 'monospace',
+    fontFamilyFallback: ['Menlo', 'Courier'],
+    color: AppColors.text,
+  );
+  static const fieldLabel = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    color: AppColors.label,
+  );
 
   static ThemeData get light {
     final textTheme = ThemeData().textTheme;

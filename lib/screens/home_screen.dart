@@ -1,23 +1,31 @@
 import 'package:flutter/material.dart';
 
 import '../api/services/my_day_service.dart';
+import '../api/services/report_service.dart';
 import '../base/custom_exception.dart';
 import '../models/field_day.dart';
+import '../models/field_visit.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_brand.dart';
+import '../widgets/app_snack_bar.dart';
 import '../widgets/visit_card.dart';
+import 'report_screen.dart';
 
 /// Pantalla principal: los servicios que el técnico tiene agendados hoy.
-/// Por ahora solo se consultan; todavía no se pueden realizar.
+/// Desde cada tarjeta se inicia o continúa el reporte del servicio.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     required this.myDayService,
     required this.technicianName,
+    this.reportService,
     super.key,
   });
 
   final MyDayService myDayService;
   final String technicianName;
+
+  /// Sin él (modo de prueba) las tarjetas no llevan botón.
+  final ReportService? reportService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,6 +33,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<FieldDay> _day = widget.myDayService.load();
+
+  /// El servicio que se está iniciando, para enseñar la rueda en su botón.
+  String? _startingId;
 
   /// Se llama al deslizar hacia abajo o al tocar «Reintentar».
   Future<void> _reload() async {
@@ -36,6 +47,30 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // El error ya lo muestra el FutureBuilder.
     }
+  }
+
+  /// Inicia el servicio si estaba programado y abre su reporte.
+  Future<void> _openVisit(FieldVisit visit) async {
+    final service = widget.reportService!;
+    if (visit.status == 'programado') {
+      setState(() => _startingId = visit.id);
+      try {
+        await service.start(visit.id);
+      } on CustomException catch (error) {
+        if (mounted) AppSnackBar.error(context, error.message);
+        return;
+      } finally {
+        if (mounted) setState(() => _startingId = null);
+      }
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReportScreen(service: service, visitId: visit.id),
+      ),
+    );
+    // Al volver, la tarjeta cambia de estado: se vuelve a pedir el día.
+    _reload();
   }
 
   @override
@@ -100,7 +135,13 @@ class _HomeScreenState extends State<HomeScreen> {
       for (final visit in visits)
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: VisitCard(visit: visit),
+          child: VisitCard(
+            visit: visit,
+            loading: _startingId == visit.id,
+            onAction: widget.reportService == null
+                ? null
+                : () => _openVisit(visit),
+          ),
         ),
     ];
   }

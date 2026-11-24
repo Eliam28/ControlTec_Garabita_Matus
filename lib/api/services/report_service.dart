@@ -129,9 +129,8 @@ class ReportService {
 
     final http.Response response;
     try {
-      response = await http.Response.fromStream(
-        await httpClient.send(request),
-      ).timeout(const Duration(seconds: 30));
+      response = await http.Response.fromStream(await httpClient.send(request))
+          .timeout(const Duration(seconds: 30));
     } on TimeoutException {
       throw const CustomException(message: AuthMessages.connection);
     } on http.ClientException {
