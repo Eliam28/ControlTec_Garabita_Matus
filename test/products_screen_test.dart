@@ -37,9 +37,14 @@ Future<AppDependencies> _open(
   addTearDown(tester.view.resetDevicePixelRatio);
   final dependencies = sessionDependencies(
     store: MemoryStore()..tokens = _tokens,
-    handler:
-        handler ??
-        (request) async => jsonResponse(productsContext(withStation: true)),
+    handler: (request) async {
+      if (request.url.path == ApiRoutes.profile) {
+        return jsonResponse(mobileSession()['user']!);
+      }
+      return handler != null
+          ? handler(request)
+          : jsonResponse(productsContext(withStation: true));
+    },
   );
   await tester.pumpWidget(
     MaterialApp(
@@ -92,6 +97,9 @@ void main() {
       final dependencies = sessionDependencies(
         store: MemoryStore()..tokens = _tokens,
         handler: (request) async {
+          if (request.url.path == ApiRoutes.profile) {
+            return jsonResponse(mobileSession()['user']!);
+          }
           if (request.url.path == ApiRoutes.me) {
             return jsonResponse({'user': mobileSession()['user']});
           }

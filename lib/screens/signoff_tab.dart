@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -47,10 +48,62 @@ class _SignoffTabState extends State<SignoffTab>
   late final _notes = TextEditingController(text: widget.report.generalNotes);
   Uint8List? _customerSignature;
   Uint8List? _technicianSignature;
+  Uint8List? _storedTechnicianSignature;
+  bool? _hasProfileSignature;
+  bool _checkingSignature = false;
+  String? _signatureCheckError;
+  String? _signaturePreviewError;
   bool _sending = false;
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(_loadTechnicianSignature());
+  }
+
+  Future<void> _loadTechnicianSignature() async {
+    if (_checkingSignature || _sending || !mounted) return;
+    setState(() {
+      _checkingSignature = true;
+      _signatureCheckError = null;
+      _signaturePreviewError = null;
+    });
+    try {
+      final technician = await widget.service.profile();
+      if (!mounted) return;
+      _hasProfileSignature = technician.hasSignature;
+      _replaceStoredSignature(null);
+      if (technician.hasSignature) {
+        try {
+          final image = await widget.service.profileSignature();
+          if (!mounted) return;
+          _replaceStoredSignature(image);
+        } catch (_) {
+          if (mounted) {
+            _signaturePreviewError =
+                'No fue posible mostrar tu firma registrada';
+          }
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        _signatureCheckError =
+            'No fue posible consultar si tienes una firma registrada';
+      }
+    } finally {
+      if (mounted) setState(() => _checkingSignature = false);
+    }
+  }
+
+  void _replaceStoredSignature(Uint8List? value) {
+    final previous = _storedTechnicianSignature;
+    _storedTechnicianSignature = value;
+    if (previous != null) unawaited(MemoryImage(previous).evict());
+  }
+
+  @override
   void dispose() {
+    _replaceStoredSignature(null);
     _receivedBy.dispose();
     _amount.dispose();
     _recommendations.dispose();
@@ -63,13 +116,21 @@ class _SignoffTabState extends State<SignoffTab>
       double.tryParse(_amount.text.trim()) != null &&
       _recommendations.text.trim().isNotEmpty &&
       _customerSignature != null &&
-      _technicianSignature != null;
+      !_checkingSignature &&
+      _signatureCheckError == null &&
+      (_hasProfileSignature == true || _technicianSignature != null);
 
-  Future<Uint8List?> _sign(String title) => Navigator.of(context).push(
-    MaterialPageRoute<Uint8List>(builder: (_) => SignatureScreen(title: title)),
-  );
+  Future<Uint8List?> _sign(String title) async {
+    if (_sending) return null;
+    return Navigator.of(context).push(
+      MaterialPageRoute<Uint8List>(
+        builder: (_) => SignatureScreen(title: title),
+      ),
+    );
+  }
 
   Future<void> _finish() async {
+    if (_sending || !_isComplete) return;
     setState(() => _sending = true);
     try {
       final paymentStatus = await widget.service.complete(
@@ -79,13 +140,20 @@ class _SignoffTabState extends State<SignoffTab>
         recommendations: _recommendations.text.trim(),
         notes: _notes.text.trim(),
         signature: _customerSignature!,
-        technicianSignature: _technicianSignature!,
+        technicianSignature: _hasProfileSignature == true
+            ? null
+            : _technicianSignature,
       );
-      widget.onCompleted(paymentStatus);
+      if (mounted) widget.onCompleted(paymentStatus);
     } on CustomException catch (error) {
       if (mounted) {
         setState(() => _sending = false);
         AppSnackBar.error(context, error.message);
+        // Si se quitó la firma del perfil mientras se llenaba el reporte,
+        // conservar la firma del cliente y permitir capturar la del técnico.
+        if (_hasProfileSignature == true && error.status == 422) {
+          await _loadTechnicianSignature();
+        }
       }
     }
   }
@@ -119,17 +187,13 @@ class _SignoffTabState extends State<SignoffTab>
                 image: _customerSignature,
                 onSign: () async {
                   final png = await _sign('Firma del cliente');
-                  if (png != null) setState(() => _customerSignature = png);
+                  if (png != null && mounted) {
+                    setState(() => _customerSignature = png);
+                  }
                 },
               ),
               const FieldLabel('Firma del técnico', required: true),
-              _SignatureBox(
-                image: _technicianSignature,
-                onSign: () async {
-                  final png = await _sign('Firma del técnico');
-                  if (png != null) setState(() => _technicianSignature = png);
-                },
-              ),
+              _technicianSignatureSection(),
             ],
           ),
         ),
@@ -157,6 +221,77 @@ class _SignoffTabState extends State<SignoffTab>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _technicianSignatureSection() {
+    if (_checkingSignature) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          children: [
+            LinearProgressIndicator(),
+            SizedBox(height: 8),
+            Text('Consultando tu firma…', style: AppTheme.body),
+          ],
+        ),
+      );
+    }
+    if (_signatureCheckError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_signatureCheckError!, style: AppTheme.body),
+          TextButton(
+            onPressed: _loadTechnicianSignature,
+            child: const Text('Reintentar'),
+          ),
+        ],
+      );
+    }
+    if (_hasProfileSignature == true) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_storedTechnicianSignature != null)
+            Container(
+              height: 120,
+              decoration: AppTheme.profileCard,
+              padding: const EdgeInsets.all(8),
+              child: Image.memory(
+                _storedTechnicianSignature!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => TextButton(
+                  onPressed: _loadTechnicianSignature,
+                  child: const Text('Reintentar vista previa'),
+                ),
+              ),
+            )
+          else ...[
+            Text(
+              _signaturePreviewError ??
+                  'No fue posible mostrar tu firma registrada',
+              style: AppTheme.body,
+            ),
+            TextButton(
+              onPressed: _loadTechnicianSignature,
+              child: const Text('Reintentar vista previa'),
+            ),
+          ],
+          const SizedBox(height: 8),
+          const Text(
+            'Se usará la firma registrada en tu perfil.',
+            style: AppTheme.body,
+          ),
+        ],
+      );
+    }
+    return _SignatureBox(
+      image: _technicianSignature,
+      onSign: () async {
+        final png = await _sign('Firma del técnico');
+        if (png != null && mounted) setState(() => _technicianSignature = png);
+      },
     );
   }
 
