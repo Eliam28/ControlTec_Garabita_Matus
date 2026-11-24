@@ -4,6 +4,7 @@ import '../api/services/report_service.dart';
 import '../base/custom_exception.dart';
 import '../models/report_context.dart';
 import '../theme/app_theme.dart';
+import 'station_screen.dart';
 
 /// El reporte de un servicio en curso, con dos pestañas:
 /// las estaciones que hay que revisar y la firma del cliente.
@@ -24,6 +25,20 @@ class _ReportScreenState extends State<ReportScreen> {
     setState(() {
       _report = widget.service.load(widget.visitId);
     });
+  }
+
+  /// Abre la estación [index]; al volver se recarga para ver lo guardado.
+  Future<void> _openStation(ReportContext report, int index) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StationScreen(
+          service: widget.service,
+          report: report,
+          index: index,
+        ),
+      ),
+    );
+    _reload();
   }
 
   @override
@@ -83,7 +98,10 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
           body: TabBarView(
             children: [
-              _StationsTab(report: report, onOpen: (i) {}),
+              _StationsTab(
+                report: report,
+                onOpen: (i) => _openStation(report, i),
+              ),
               const SizedBox(),
             ],
           ),
