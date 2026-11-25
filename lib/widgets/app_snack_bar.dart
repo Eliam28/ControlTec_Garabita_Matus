@@ -11,6 +11,20 @@ abstract final class AppSnackBar {
   static void warning(BuildContext context, String message) =>
       _show(context, message, warning: true);
 
+  static void success(BuildContext context, String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.removeCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message, style: AppTheme.snackBarText),
+        backgroundColor: AppColors.success,
+        duration: duration,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   static void _show(
     BuildContext context,
     String message, {

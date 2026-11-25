@@ -3,11 +3,28 @@ import 'package:flutter/material.dart';
 import '../models/field_visit.dart';
 import '../theme/app_theme.dart';
 
-/// Tarjeta de un servicio agendado. Solo muestra información.
+/// Tarjeta de un servicio agendado. Si hay [onAction], abajo lleva el botón
+/// para iniciar o continuar el servicio.
 class VisitCard extends StatelessWidget {
-  const VisitCard({required this.visit, super.key});
+  const VisitCard({
+    required this.visit,
+    this.onAction,
+    this.loading = false,
+    super.key,
+  });
 
   final FieldVisit visit;
+  final VoidCallback? onAction;
+  final bool loading;
+
+  /// El texto del botón según cómo va el servicio. Null: no lleva botón.
+  String? get _actionLabel => switch (visit.status) {
+    'programado' => 'Iniciar servicio',
+    'en_progreso' => 'Continuar servicio',
+    // Ya firmado, pero falta decir si el cliente pagó.
+    'completado' when visit.paymentStatus == 'pendiente' => 'Registrar pago',
+    _ => null,
+  };
 
   @override
   Widget build(BuildContext context) => Container(
@@ -15,10 +32,12 @@ class VisitCard extends StatelessWidget {
     decoration: BoxDecoration(
       color: AppColors.white,
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: AppColors.border),
+      border: visit.status == 'en_progreso'
+          ? Border.all(color: AppColors.primary, width: 1.5)
+          : Border.all(color: AppColors.border),
     ),
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Wrap: si la hora y el estado no caben juntos, el estado baja.
         Wrap(
@@ -37,6 +56,23 @@ class VisitCard extends StatelessWidget {
         _InfoRow(icon: Icons.place_outlined, text: visit.address),
         if (visit.notes != null)
           _InfoRow(icon: Icons.sticky_note_2_outlined, text: visit.notes!),
+        if (onAction != null && _actionLabel != null) ...[
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: loading ? null : onAction,
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 50)),
+            icon: loading
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.white,
+                    ),
+                  )
+                : const Icon(Icons.edit_outlined, size: 20),
+            label: Text(_actionLabel!),
+          ),
+        ],
       ],
     ),
   );

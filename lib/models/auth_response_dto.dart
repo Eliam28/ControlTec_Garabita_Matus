@@ -29,7 +29,16 @@ class AuthResponseDto {
     }
     return AuthResponseDto.api(
       technician: Technician.fromApiJson(json['user'] as Map<String, dynamic>),
-      tokens: AuthTokens(accessToken: accessToken, refreshToken: refreshToken),
+      tokens: AuthTokens(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        accessExpiresAt: DateTime.now().toUtc().add(
+          Duration(seconds: expiresIn),
+        ),
+        refreshExpiresAt: DateTime.now().toUtc().add(
+          Duration(seconds: refreshExpiresIn),
+        ),
+      ),
       expiresIn: expiresIn,
       refreshExpiresIn: refreshExpiresIn,
     );

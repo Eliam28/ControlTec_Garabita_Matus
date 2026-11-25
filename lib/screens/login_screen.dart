@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/auth_messages.dart';
-import 'app_routes.dart';
 import 'controllers/login_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_brand.dart';
@@ -35,8 +34,6 @@ class _LoginScreenState extends State<LoginScreen> {
     if (succeeded) {
       TextInput.finishAutofillContext();
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      Navigator.of(context)
-          .pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
     } else {
       final error = widget.controller.errorMessage;
       if (error != null) AppSnackBar.error(context, error);
