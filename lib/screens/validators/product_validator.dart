@@ -8,7 +8,7 @@ abstract final class ProductValidator {
     required String extraInfo,
   }) {
     if (product == null) return 'Seleccione un producto del catálogo';
-    if (area.trim().isEmpty || technique == null || extraInfo.trim().isEmpty) {
+    if (area.trim().isEmpty || technique == null) {
       return 'Complete todos los campos obligatorios';
     }
     if (area.trim().runes.length > 200 ||

@@ -9,11 +9,13 @@ import '../../base/custom_exception.dart';
 import '../../models/report_context.dart';
 import '../../models/report_product.dart';
 import '../../models/technician.dart';
+import '../../models/report_evidence.dart';
 import '../api_routes.dart';
 import '../auth_messages.dart';
 import 'profile_api.dart';
 import 'profile_service.dart';
 import 'token_store.dart';
+import 'evidence_draft_store.dart';
 
 /// Todas las peticiones del reporte de un servicio:
 /// iniciar, leer, guardar estaciones, firmar y declarar el pago.
@@ -22,11 +24,13 @@ class ReportService {
     required this.httpClient,
     required this.baseUrl,
     required this.tokenStore,
+    this.evidenceDrafts,
   });
 
   final http.Client httpClient;
   final String baseUrl;
   final TokenStore tokenStore;
+  final EvidenceDraftStore? evidenceDrafts;
 
   /// El servicio pasa de Programado a En progreso.
   Future<void> start(String visitId) =>
@@ -98,6 +102,8 @@ class ReportService {
     required String notes,
     required Uint8List signature,
     Uint8List? technicianSignature,
+    List<EvidencePhoto> photos = const [],
+    String? clientKey,
   }) async {
     final request = http.MultipartRequest(
       'POST',
@@ -109,11 +115,19 @@ class ReportService {
       'recommendations': recommendations,
       if (notes.isNotEmpty) 'general_notes': notes,
       'signed_at': DateTime.now().toUtc().toIso8601String(),
+      'client_key': ?clientKey,
     });
     request.files.addAll([
       _png('signature', signature),
       if (technicianSignature != null)
         _png('technician_signature', technicianSignature),
+      for (final photo in photos)
+        http.MultipartFile.fromBytes(
+          'photos',
+          photo.bytes,
+          filename: photo.filename,
+          contentType: MediaType.parse(photo.mimeType),
+        ),
     ]);
     final body = await _send(request);
     final json = jsonDecode(body) as Map<String, dynamic>;

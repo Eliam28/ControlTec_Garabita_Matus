@@ -78,26 +78,28 @@ class ProductApplication {
     required this.productId,
     required this.area,
     required this.technique,
-    required this.extraInfo,
+    this.extraInfo,
   });
 
   final String productId;
   final String area;
   final ApplicationTechnique technique;
-  final String extraInfo;
+  final String? extraInfo;
 
   Map<String, dynamic> toJson() => {
     'product_id': productId,
     'area': area,
     'technique': technique.name,
-    'extra_info': extraInfo,
+    'extra_info': extraInfo?.trim().isNotEmpty == true
+        ? extraInfo!.trim()
+        : null,
   };
 
   bool matches(AppliedProduct product) =>
       product.productId == productId &&
       product.area == area &&
       product.technique == technique.name &&
-      product.extraInfo == extraInfo;
+      (product.extraInfo ?? '').trim() == (extraInfo ?? '').trim();
 }
 
 /// Retained by one form across retries. A lost PUT response must not add twice.

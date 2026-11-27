@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_snack_bar.dart';
 import '../widgets/field_label.dart';
 import 'signature_screen.dart';
+import 'controllers/report_evidence_controller.dart';
 
 /// Pestaña 2 del reporte: quién recibe, importe, recomendaciones y las dos
 /// firmas. «Terminar servicio» cierra el reporte y avisa con [onCompleted]
@@ -19,12 +20,14 @@ class SignoffTab extends StatefulWidget {
     required this.service,
     required this.report,
     required this.onCompleted,
+    this.evidenceController,
     super.key,
   });
 
   final ReportService service;
   final ReportContext report;
   final void Function(String paymentStatus) onCompleted;
+  final ReportEvidenceController? evidenceController;
 
   @override
   State<SignoffTab> createState() => _SignoffTabState();
@@ -59,6 +62,12 @@ class _SignoffTabState extends State<SignoffTab>
   void initState() {
     super.initState();
     unawaited(_loadTechnicianSignature());
+    widget.evidenceController?.addListener(_evidenceChanged);
+    unawaited(widget.evidenceController?.initialize());
+  }
+
+  void _evidenceChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadTechnicianSignature() async {
@@ -103,6 +112,7 @@ class _SignoffTabState extends State<SignoffTab>
 
   @override
   void dispose() {
+    widget.evidenceController?.removeListener(_evidenceChanged);
     _replaceStoredSignature(null);
     _receivedBy.dispose();
     _amount.dispose();
@@ -116,6 +126,11 @@ class _SignoffTabState extends State<SignoffTab>
       double.tryParse(_amount.text.trim()) != null &&
       _recommendations.text.trim().isNotEmpty &&
       _customerSignature != null &&
+      (widget.evidenceController == null ||
+          (widget.evidenceController!.ready &&
+              !widget.evidenceController!.closed &&
+              !widget.evidenceController!.busy &&
+              widget.evidenceController!.additionalCount <= 4)) &&
       !_checkingSignature &&
       _signatureCheckError == null &&
       (_hasProfileSignature == true || _technicianSignature != null);
@@ -131,6 +146,8 @@ class _SignoffTabState extends State<SignoffTab>
 
   Future<void> _finish() async {
     if (_sending || !_isComplete) return;
+    final evidence = widget.evidenceController;
+    if (evidence != null && !evidence.beginCompletion()) return;
     setState(() => _sending = true);
     try {
       final paymentStatus = await widget.service.complete(
@@ -143,7 +160,10 @@ class _SignoffTabState extends State<SignoffTab>
         technicianSignature: _hasProfileSignature == true
             ? null
             : _technicianSignature,
+        photos: evidence?.photos ?? const [],
+        clientKey: evidence?.completionKey,
       );
+      await evidence?.completed();
       if (mounted) widget.onCompleted(paymentStatus);
     } on CustomException catch (error) {
       if (mounted) {
@@ -155,6 +175,8 @@ class _SignoffTabState extends State<SignoffTab>
           await _loadTechnicianSignature();
         }
       }
+    } finally {
+      evidence?.endCompletion();
     }
   }
 

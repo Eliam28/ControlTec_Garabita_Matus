@@ -8,6 +8,7 @@ import '../../api/services/login_service.dart';
 import '../../api/services/my_day_service.dart';
 import '../../api/services/profile_api.dart';
 import '../../api/services/profile_service.dart';
+import '../../api/services/evidence_draft_store.dart';
 import '../../base/custom_exception.dart';
 import '../../models/field_day.dart';
 import '../../models/signature_image.dart';
@@ -21,6 +22,7 @@ class ProfileController extends ChangeNotifier {
     required this.profileService,
     required this.myDayService,
     required this.daySnapshot,
+    this.evidenceDrafts,
   }) : technician = authentication.session!.technician {
     daySnapshot.snapshot.addListener(_dayChanged);
   }
@@ -30,6 +32,7 @@ class ProfileController extends ChangeNotifier {
   final ProfileService profileService;
   final MyDayService myDayService;
   final DaySnapshotApi daySnapshot;
+  final EvidenceDraftStore? evidenceDrafts;
   Technician technician;
   FieldDay? day;
   Uint8List? signature;

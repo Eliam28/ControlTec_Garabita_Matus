@@ -13,6 +13,7 @@ import 'package:controltec_app/screens/signoff_tab.dart';
 import 'package:controltec_app/screens/station_screen.dart';
 import 'package:controltec_app/theme/app_theme.dart';
 import 'package:controltec_app/widgets/applied_product_card.dart';
+import 'package:controltec_app/widgets/field_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -72,6 +73,11 @@ Future<void> _openForm(WidgetTester tester) async {
         )
         .first,
   );
+  await Scrollable.ensureVisible(
+    tester.element(find.text('Agregar producto')),
+    alignment: .5,
+  );
+  await tester.pumpAndSettle();
   await tester.tap(find.text('Agregar producto'));
   await tester.pumpAndSettle();
 }
@@ -91,6 +97,98 @@ Future<void> _complete(WidgetTester tester) async {
 }
 
 void main() {
+  for (final size in [const Size(800, 900), const Size(320, 700)]) {
+    testWidgets(
+      'Stage widths stay equal and stable before and after completion at $size',
+      (tester) async {
+        await _open(tester, size: size);
+        List<Rect> stageRects() => [
+          for (final element in find.byType(Tab).evaluate())
+            tester.getRect(find.byWidget(element.widget)),
+        ];
+        final initial = stageRects();
+        expect(initial, hasLength(4));
+        final bar = tester.widget<TabBar>(find.byType(TabBar));
+        if (size.width == 800) {
+          expect(bar.isScrollable, isFalse);
+          expect(initial.last.right + 6, closeTo(size.width, .01));
+        } else {
+          expect(bar.isScrollable, isTrue);
+        }
+        for (var phase = 0; phase < 4; phase++) {
+          final rects = stageRects();
+          for (var i = 0; i < rects.length; i++) {
+            expect(rects[i].width, closeTo(initial.first.width, .01));
+            expect(rects[i].height, initial.first.height);
+            if (i > 0) {
+              expect(rects[i].left - rects[i - 1].right, closeTo(12, .01));
+            }
+          }
+          expect(tester.takeException(), isNull);
+          if (phase < 3) {
+            await tester.tap(find.text('Continuar'));
+            await tester.pumpAndSettle();
+          }
+        }
+        expect(find.byIcon(Icons.check_circle), findsNWidgets(3));
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(stageRects().map((r) => r.size), initial.map((r) => r.size));
+      },
+    );
+  }
+
+  testWidgets(
+    'Products can be saved without optional notes and reopen cleanly',
+    (tester) async {
+      List<Map<String, dynamic>> saved = [];
+      final dependencies = await _open(
+        tester,
+        handler: (request) async {
+          if (request.method == 'GET') {
+            return jsonResponse(productsContext(products: saved));
+          }
+          final submitted = jsonDecode(request.body)['products'] as List;
+          expect(submitted.single['extra_info'], isNull);
+          saved = savedProductResponse(submitted);
+          return jsonResponse(saved);
+        },
+      );
+      await _openForm(tester);
+      final label = tester.widget<FieldLabel>(
+        find.byWidgetPredicate(
+          (w) => w is FieldLabel && w.text == 'Más información (opcional)',
+        ),
+      );
+      expect(label.required, isFalse);
+      await _selectProduct(tester);
+      await tester.enterText(find.byType(TextField).first, 'Cocina');
+      await tester.tap(find.text('Aspersión'));
+      await tester.tap(find.text('Agregar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProductApplicationScreen), findsNothing);
+      expect(find.byType(AppliedProductCard), findsOneWidget);
+      expect(find.textContaining('Más información:'), findsNothing);
+      expect(find.text('Producto agregado correctamente'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: ReportScreen(
+            service: dependencies.reportService!,
+            visitId: 'visit-0',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AppliedProductCard), findsOneWidget);
+      expect(find.textContaining('Más información:'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'Completing the existing signature still opens payment for the same visit',
     (tester) async {
@@ -120,6 +218,8 @@ void main() {
       await tester.pumpWidget(MainApp(dependencies: dependencies));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Iniciar servicio'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();
@@ -194,11 +294,14 @@ void main() {
       expect(contexts, reads);
       await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();
+      expect(find.text('Fotografías adicionales · 0/4'), findsOneWidget);
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
       expect(find.byType(SignoffTab), findsOneWidget);
       await tester.enterText(find.byType(TextField).first, 'Nombre conservado');
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.text('Sin productos aplicados'), findsOneWidget);
+      expect(find.text('Fotografías adicionales · 0/4'), findsOneWidget);
       await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();
       expect(find.text('Nombre conservado'), findsOneWidget);

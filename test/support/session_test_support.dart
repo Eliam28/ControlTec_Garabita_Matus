@@ -10,6 +10,8 @@ import 'package:http/testing.dart';
 
 import 'login_test_support.dart';
 
+import 'package:controltec_app/api/services/evidence_draft_store.dart';
+
 Uint8List signaturePng() => base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAQAAAABCAYAAAD5PA/NAAAADklEQVR4nGMQUDD4j4wBKPUFfT1eD/QAAAAASUVORK5CYII=',
 );
@@ -55,6 +57,7 @@ AppDependencies sessionDependencies({
     const AppConfig(apiBaseUrl: 'https://example.com'),
     client: MockClient(handler),
     tokenStore: store ?? MemoryStore(),
+    evidenceDrafts: MemoryEvidenceDraftStore(),
   );
   addTearDown(dependencies.dispose);
   return dependencies;
