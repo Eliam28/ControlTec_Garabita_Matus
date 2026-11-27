@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:http/http.dart' as http;
 
 import 'services/auth_api_contract.dart';
@@ -15,6 +17,7 @@ import 'services/session_http_client.dart';
 import 'services/profile_api.dart';
 import 'services/profile_service.dart';
 import 'app_config.dart';
+import 'services/evidence_draft_store.dart';
 
 /// Owns the single HTTP client used by every API. Mock mode creates none.
 class AppDependencies {
@@ -32,6 +35,7 @@ class AppDependencies {
     AppConfig config, {
     http.Client? client,
     TokenStore? tokenStore,
+    EvidenceDraftStore? evidenceDrafts,
   }) {
     if (config.useMockAuth) {
       return AppDependencies._(
@@ -75,6 +79,7 @@ class AppDependencies {
       httpClient: httpClient,
       baseUrl: config.apiBaseUrl,
       tokenStore: store,
+      evidenceDrafts: evidenceDrafts ?? FileEvidenceDraftStore(),
     );
     final profileService = ProfileService(
       api: ProfileApi(httpClient: httpClient, baseUrl: config.apiBaseUrl),
@@ -110,6 +115,7 @@ class AppDependencies {
         httpClient: client,
         baseUrl: api.baseUrl,
         tokenStore: store,
+        evidenceDrafts: FileEvidenceDraftStore(),
       ),
       client,
       snapshot,
@@ -131,7 +137,11 @@ class AppDependencies {
   final ProfileService? profileService;
   final bool _ownsLogin;
 
-  void clearSessionData() => daySnapshot?.clear();
+  void clearSessionData() {
+    daySnapshot?.clear();
+    final drafts = reportService?.evidenceDrafts;
+    if (drafts != null) unawaited(drafts.clearAll().catchError((Object _) {}));
+  }
 
   void dispose() {
     if (_ownsLogin) loginService.dispose();

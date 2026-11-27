@@ -39,6 +39,7 @@ class _MainShellState extends State<MainShell> {
           profileService: widget.dependencies.profileService!,
           myDayService: widget.dependencies.myDayService,
           daySnapshot: widget.dependencies.daySnapshot!,
+          evidenceDrafts: widget.dependencies.reportService?.evidenceDrafts,
         );
         _pages[2] = ProfileScreen(controller: _profile!);
       }

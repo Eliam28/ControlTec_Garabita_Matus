@@ -239,7 +239,7 @@ class _ProductApplicationScreenState extends State<ProductApplicationScreen> {
                 contentPadding: AppTheme.applicationInputPadding,
               ),
             ),
-            const FieldLabel('Más información', required: true),
+            const FieldLabel('Más información (opcional)'),
             TextField(
               controller: _extraInfo,
               enabled: !_saving,

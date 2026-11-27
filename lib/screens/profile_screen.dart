@@ -43,6 +43,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
     try {
+      final ownerId = _profile.authentication.session?.technician.id;
+      if (ownerId != null &&
+          (await _profile.evidenceDrafts?.hasPendingPicker(ownerId) ?? false)) {
+        return;
+      }
+      if (!mounted) return;
       final result = await _picker.retrieveLostData();
       if (result.exception != null) throw result.exception!;
       if (result.files?.isNotEmpty == true && mounted) {

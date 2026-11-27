@@ -71,7 +71,7 @@ class ReportProductsService
             saved.productId == product.productId &&
             saved.area == product.area &&
             saved.technique == product.technique &&
-            saved.extraInfo == product.extraInfo,
+            (saved.extraInfo ?? '').trim() == (product.extraInfo ?? '').trim(),
       );
       if (index < 0) return false;
       remaining.removeAt(index);

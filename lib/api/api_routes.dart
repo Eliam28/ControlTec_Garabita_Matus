@@ -15,6 +15,8 @@ abstract final class ApiRoutes {
       '/reports/visits/$visitId/context';
   static String reportProducts(String visitId) =>
       '/reports/visits/$visitId/products';
+  static String reportFile(String reportId, String filename) =>
+      '/reports/files/${Uri.encodeComponent(reportId)}/${Uri.encodeComponent(filename)}';
   static String reportStation(String visitId, String stationId) =>
       '/reports/visits/$visitId/stations/$stationId';
   static String completeReport(String visitId) =>

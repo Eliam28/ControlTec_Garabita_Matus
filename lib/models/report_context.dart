@@ -1,4 +1,5 @@
 import 'report_product.dart';
+import 'report_evidence.dart';
 
 /// Lo que responde GET /reports/visits/{id}/context: todo lo que necesita
 /// el reporte (cliente, estaciones, plagas y lo que ya se capturó).
@@ -16,6 +17,9 @@ class ReportContext {
     required this.pests,
     this.products = const [],
     this.productOptions = const [],
+    this.reportId,
+    this.evidence = const [],
+    this.visitStatus,
   });
 
   final String visitId;
@@ -30,6 +34,9 @@ class ReportContext {
   final List<Option> pests;
   final List<AppliedProduct> products;
   final List<CatalogProduct> productOptions;
+  final String? reportId;
+  final List<ReportEvidence> evidence;
+  final String? visitStatus;
 
   int get doneStations => stations.where((s) => s.isDone).length;
 
@@ -37,6 +44,11 @@ class ReportContext {
     final charged = json['charged_amount'] as String? ?? '';
     return ReportContext(
       visitId: json['visit_id'] as String,
+      reportId: json['report_id'] as String?,
+      visitStatus: json['visit_status'] as String?,
+      evidence: (json['evidence'] as List? ?? [])
+          .map((e) => ReportEvidence.fromJson(e as Map<String, dynamic>))
+          .toList(),
       customerName: json['customer_name'] as String,
       locationName: json['location_name'] as String,
       startTime: (json['scheduled_time_start'] as String).substring(0, 5),
@@ -79,6 +91,7 @@ class ReportStation {
     this.condition,
     this.pestIds = const [],
     this.notes,
+    this.photoPath,
   });
 
   final String id;
@@ -93,6 +106,7 @@ class ReportStation {
   final String? condition;
   final List<String> pestIds;
   final String? notes;
+  final String? photoPath;
 
   bool get isDone => findingId != null;
 
@@ -115,6 +129,7 @@ class ReportStation {
       condition: inspection?['station_condition'] as String?,
       pestIds: List<String>.from(inspection?['pest_ids'] as List? ?? []),
       notes: inspection?['notes'] as String?,
+      photoPath: inspection?['photo_path'] as String?,
     );
   }
 }

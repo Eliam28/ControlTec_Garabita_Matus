@@ -30,11 +30,10 @@ class AppliedProductCard extends StatelessWidget {
           'Dosis aplicada: ${_value(product.appliedDose)}',
           style: AppTheme.body,
         ),
-        const SizedBox(height: 6),
-        Text(
-          'Más información: ${_value(product.extraInfo)}',
-          style: AppTheme.body,
-        ),
+        if (product.extraInfo?.trim().isNotEmpty == true) ...[
+          const SizedBox(height: 6),
+          Text('Más información: ${product.extraInfo}', style: AppTheme.body),
+        ],
       ],
     ),
   );

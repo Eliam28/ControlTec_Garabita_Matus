@@ -41,7 +41,7 @@ void main() {
     expect(report.stations.single.notes, 'Inspección existente');
   });
 
-  test('Validation requires product, area, one technique and observations; dose belongs to catalog', () {
+  test('Validation requires product, area and technique; observations are optional', () {
     const product = CatalogProduct(id: 'product-1', name: 'Producto');
     String? validate({
       CatalogProduct? selected = product,
@@ -57,7 +57,8 @@ void main() {
     expect(validate(selected: null), 'Seleccione un producto del catálogo');
     expect(validate(area: '  '), 'Complete todos los campos obligatorios');
     expect(validate(technique: null), 'Complete todos los campos obligatorios');
-    expect(validate(info: '  '), 'Complete todos los campos obligatorios');
+    expect(validate(info: '  '), isNull);
+    expect(validate(info: ''), isNull);
     expect(validate(area: 'a' * 201), isNotNull);
     expect(validate(info: 'a' * 1001), isNotNull);
     expect(validate(), isNull);
@@ -70,6 +71,59 @@ void main() {
       'espolvoreo',
     ]);
   });
+
+  for (final empty in [null, '', '   ']) {
+    test(
+      'Optional notes survive confirmation and a lost response retry: "$empty"',
+      () async {
+        List<Map<String, dynamic>> saved = [
+          {
+            ...appliedProduct(id: 'previous', productId: 'previous'),
+            'extra_info': '',
+          },
+        ];
+        var writes = 0;
+        final dependencies = sessionDependencies(
+          store: MemoryStore()..tokens = _tokens,
+          handler: (request) async {
+            if (request.method == 'GET') {
+              return jsonResponse(productsContext(products: saved));
+            }
+            writes++;
+            final submitted = jsonDecode(request.body)['products'] as List;
+            expect(submitted.last['extra_info'], isNull);
+            saved = savedProductResponse(submitted);
+            for (final row in saved) {
+              row['extra_info'] = empty;
+              if (empty == null) row.remove('extra_info');
+            }
+            if (writes == 1) throw http.ClientException('lost response');
+            return jsonResponse(saved);
+          },
+        );
+        final service = ReportProductsService(dependencies.reportService!);
+        ProductAddition addition() => ProductAddition(
+          visitId: 'visit-0',
+          application: const ProductApplication(
+            productId: 'product-1',
+            area: 'Cocina',
+            technique: ApplicationTechnique.aspersion,
+            extraInfo: '  ',
+          ),
+        );
+        final first = addition();
+        await expectLater(
+          service.execute(first),
+          throwsA(isA<CustomException>()),
+        );
+        expect(await service.execute(first), hasLength(2));
+        expect(writes, 1);
+        // A separate addition still keeps previous rows when the API normalizes blanks.
+        expect(await service.execute(addition()), hasLength(3));
+        expect(writes, 2);
+      },
+    );
+  }
 
   test('Replacing PUT reads fresh rows and retains every existing product and field', () async {
     final existing = [
